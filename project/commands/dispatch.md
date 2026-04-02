@@ -99,53 +99,25 @@ Each agent runs in an isolated worktree (`isolation: "worktree"`, `run_in_backgr
 
 Set the `model` parameter on each agent according to auto-selected or overridden model.
 
-#### Extraction agents
+#### Per-task workflow: delegate to `/deliver`
 
-Pass the full `/extraction-fix` workflow in the agent prompt:
-```
-You are fixing a tour content extraction issue autonomously in an isolated worktree.
-Make all decisions autonomously — never ask the user. Document your reasoning in the PR.
-
-Issue: <description>
-URL: <extracted URL>
-
-Create branch: fix/extraction-<label>
-
-[Include full extraction-fix workflow from .claude/commands/extraction-fix.md]
-
-After fixing and tests pass:
-1. Commit: fix: <short description>
-2. Run /create-pr (handles: code review, docs update, pre-flight checks, PR creation)
-3. Run /op-update on OP#<ID> (if ticket provided)
-4. Report: branch, PR URL, files changed, test results
-```
-
-#### Bugfix / Feature / Adhoc agents
+Each agent runs `/deliver` with the appropriate arguments:
 
 ```
-You are implementing a task autonomously in an isolated worktree.
-Make all decisions autonomously — never ask the user. Pick the simplest approach and document reasoning in the PR.
+You are working autonomously in an isolated worktree.
+Make all decisions autonomously — never ask the user. Pick the simplest approach.
 
-Ticket: OP#<ID> (if available)
-Task: <description>
-Type: <bugfix|feature|adhoc>
+Run the /deliver command with these arguments:
+- Ticket: /deliver OP#<ID> (if ticket provided)
+- Adhoc: /deliver "<description>" (if no ticket)
 
-[For OP tickets]: Run /op-read to fetch ticket details first.
-[For adhoc]: Use the description as-is.
+The task scope is already defined — treat it as a "Small fix" in /deliver's Step 2
+so it skips planning/interview and goes straight to execution.
 
-Create branch: <type>/<ID>-<label> (or fix/<label> for adhoc)
-
-Workflow:
-1. Read ticket context (if OP ticket)
-2. Implement the changes (pick simplest viable approach)
-3. Type-check: pnpm run type-check (in affected app directory)
-4. Tests: pnpm run test:unit (in affected app directory)
-5. If checks fail, fix (up to 3 attempts). If still failing, report the failure.
-6. Commit: <type>(module): description [Refs: OP#<ID>]
-7. Run /create-pr (handles: code review, docs update, pre-flight checks, PR creation)
-8. Run /op-update on OP#<ID> (if ticket provided)
-9. Report: branch, PR URL, files changed, test results
+After /deliver completes, report: branch, PR URL, files changed, test results.
 ```
+
+`/deliver` handles the full workflow: read ticket → branch → execute → create-pr → op-update.
 
 ### 5. Failure Handling
 
@@ -190,7 +162,7 @@ Needs attention: PR #53 (draft — tests failing)
 
 ## Rules
 
-1. **Single source of truth** — delegate to `/extraction-fix`, `/create-pr`, `/op-update`. Never duplicate their logic.
+1. **Single source of truth** — delegate to `/deliver` per task. Never duplicate its logic.
 2. **Fully autonomous** — agents never ask the user. Pick simplest approach, document reasoning in PR.
 3. **Worktree isolation** — never modify the user's working tree
 4. **Background execution** — user is free to do other work

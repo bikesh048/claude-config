@@ -20,26 +20,33 @@ header() { echo -e "\n${BOLD}$1${NC}"; }
 usage() {
   cat <<EOF
 Usage:
-  $(basename "$0") --global [--machine=mac|linux|windows]
-  $(basename "$0") <project-path> --profile=<name> [--config=<file>] [--update] [--link]
+  $(basename "$0") <project-path> [--profile=<name>...] [--config=<file>] [--update] [--copy]
+  $(basename "$0") <project-path> --add <type> <name> [--copy]
   $(basename "$0") --list-profiles
 
 Options:
-  --global              Install global config (agents, rules) to ~/.claude/
-  --machine=<name>      Machine profile (mac, linux, windows)
-  --profile=<name>      Project profile (fullstack-ts, laravel-php)
+  --profile=<name>      Project profile (repeatable). No --profile = install all.
   --config=<file>       Token values file (or uses .claude-config.env in project)
   --update              Update mode: show diffs, prompt accept/skip per file
-  --link                Symlink mode: symlink files from claude-config into project
-                        Edits in project flow back to claude-config automatically.
-                        Files needing token replacement are copied (not linked).
+  --copy                Copy mode: copy files instead of symlinking (default is symlink).
+                        Use when you want project-specific overrides that don't flow back.
+  --add <type> <name>   Add a single item to a project. Type: skill, rule, command, agent.
   --list-profiles       List available profiles
 
+Symlink mode (default):
+  Files are symlinked from claude-config into the project's .claude/ directory.
+  Edits in the project flow back to claude-config automatically.
+  Files needing token replacement are always copied (not linked).
+
 Examples:
-  $(basename "$0") --global --machine=mac
   $(basename "$0") ~/projects/tripcart-builder --profile=fullstack-ts
-  $(basename "$0") ~/projects/tripcart-builder --profile=fullstack-ts --link
-  $(basename "$0") ~/projects/tripcart-builder --profile=fullstack-ts --update
+  $(basename "$0") ~/projects/tripcart-builder --profile=fullstack-ts --profile=laravel-php
+  $(basename "$0") ~/projects/tripcart-builder                        # installs all profiles
+  $(basename "$0") ~/projects/tripcart-builder --update
+  $(basename "$0") ~/projects/tripcart-builder --add skill my-new-skill
+  $(basename "$0") ~/projects/tripcart-builder --add rule my-rule.md
+  $(basename "$0") ~/projects/tripcart-builder --add command my-cmd.md
+  $(basename "$0") ~/projects/tripcart-builder --add agent my-agent.md
 EOF
   exit 1
 }
@@ -58,52 +65,6 @@ list_profiles() {
     )
     echo ""
   done
-}
-
-# ---------- Global install ----------
-install_global() {
-  local machine="${1:-}"
-  local target="$HOME/.claude"
-
-  header "Installing global config to $target"
-
-  # Rules
-  if [ -d "$target/rules" ]; then
-    warn "~/.claude/rules/ already exists — skipping (won't overwrite customizations)"
-  else
-    cp -r "$SCRIPT_DIR/global/rules" "$target/rules"
-    log "Installed rules/ (common + typescript)"
-  fi
-
-  # Agents
-  mkdir -p "$target/agents"
-  cp "$SCRIPT_DIR/global/agents/"*.md "$target/agents/"
-  log "Installed agents/ (code-reviewer, security-auditor)"
-
-  # Settings template
-  if [ ! -f "$target/settings.json" ]; then
-    cp "$SCRIPT_DIR/global/settings.json.template" "$target/settings.json"
-    log "Created settings.json from template"
-  else
-    warn "~/.claude/settings.json already exists — skipping"
-  fi
-
-  # Machine profile
-  if [ -n "$machine" ]; then
-    local machine_file="$SCRIPT_DIR/config/machines/${machine}.env"
-    if [ -f "$machine_file" ]; then
-      cp "$machine_file" "$target/.machine-profile"
-      log "Applied machine profile: $machine"
-    else
-      error "Machine profile not found: $machine_file"
-      echo "  Available: mac, linux, windows"
-      exit 1
-    fi
-  fi
-
-  echo ""
-  log "Global install complete!"
-  echo "  Next: stow personal config from ~/dotfiles if needed"
 }
 
 # ---------- Token replacement ----------
@@ -334,7 +295,27 @@ install_project() {
     log "Installed settings.json (copied)"
   fi
 
-  # --- Install rules ---
+  # --- Install shared rule directories (common, typescript, etc.) ---
+  if [ ${#SHARED_RULES_DIRS[@]} -gt 0 ]; then
+    for dir in "${SHARED_RULES_DIRS[@]}"; do
+      local src_dir="$SCRIPT_DIR/project/rules/$dir"
+      if [ -d "$src_dir" ]; then
+        mkdir -p "$target/rules/$dir"
+        for rule_file in "$src_dir"/*.md; do
+          [ -f "$rule_file" ] || continue
+          local fname
+          fname="$(basename "$rule_file")"
+          if install_file "$rule_file" "$target/rules/$dir/$fname" "$update_mode" "$link_mode" false; then
+            log "Installed rule: $dir/$fname"
+          fi
+        done
+      else
+        warn "Shared rules dir not found: $dir (skipped)"
+      fi
+    done
+  fi
+
+  # --- Install project-specific rules ---
   if [ ${#RULES[@]} -gt 0 ]; then
     mkdir -p "$target/rules"
     for rule in "${RULES[@]}"; do
@@ -345,6 +326,21 @@ install_project() {
         fi
       else
         warn "Rule not found: $rule (skipped)"
+      fi
+    done
+  fi
+
+  # --- Install agents ---
+  if [ ${#AGENTS[@]} -gt 0 ]; then
+    mkdir -p "$target/agents"
+    for agent in "${AGENTS[@]}"; do
+      local src="$SCRIPT_DIR/project/agents/$agent"
+      if [ -f "$src" ]; then
+        if install_file "$src" "$target/agents/$agent" "$update_mode" "$link_mode" false; then
+          log "Installed agent: $agent"
+        fi
+      else
+        warn "Agent not found: $agent (skipped)"
       fi
     done
   fi
@@ -411,18 +407,6 @@ install_project() {
     done
   fi
 
-  # --- Install specs ---
-  if [ ${#SPECS[@]} -gt 0 ]; then
-    mkdir -p "$target/specs"
-    for spec in "${SPECS[@]}"; do
-      local src="$SCRIPT_DIR/project/specs/$spec"
-      if [ -f "$src" ]; then
-        if install_file "$src" "$target/specs/$spec" "$update_mode" "$link_mode" false; then
-          log "Installed spec: $spec"
-        fi
-      fi
-    done
-  fi
 
   # --- Install templates ---
   if [ ${#TEMPLATES[@]} -gt 0 ]; then
@@ -472,14 +456,130 @@ install_project() {
   fi
 }
 
+# ---------- Add single item ----------
+add_item() {
+  local project_path="$1"
+  local item_type="$2"
+  local item_name="$3"
+  local link_mode="${4:-true}"
+
+  if [ ! -d "$project_path" ]; then
+    error "Project path not found: $project_path"
+    exit 1
+  fi
+
+  local target="$project_path/.claude"
+
+  # Load config for token replacement
+  local config_file="$project_path/.claude-config.env"
+  local has_config=false
+  if [ -f "$config_file" ]; then
+    load_config "$config_file"
+    has_config=true
+  fi
+
+  case "$item_type" in
+    skill)
+      local src_dir="$SCRIPT_DIR/project/skills/$item_name"
+      if [ ! -d "$src_dir" ]; then
+        error "Skill not found: $item_name"
+        echo "  Available:"
+        for d in "$SCRIPT_DIR/project/skills/"*/; do
+          echo "    - $(basename "$d")"
+        done
+        exit 1
+      fi
+      mkdir -p "$target/skills/$item_name"
+      local skill_has_tokens=false
+      while IFS= read -r -d '' file; do
+        local rel="${file#"$src_dir"/}"
+        mkdir -p "$target/skills/$item_name/$(dirname "$rel")"
+        local file_has_tokens=false
+        if has_tokens "$file"; then
+          file_has_tokens=true
+          skill_has_tokens=true
+        fi
+        install_file "$file" "$target/skills/$item_name/$rel" false "$link_mode" "$file_has_tokens"
+      done < <(/usr/bin/find "$src_dir" -type f -print0)
+      if [ "$skill_has_tokens" = true ]; then
+        if [ "$has_config" = false ]; then
+          error "Skill '$item_name' has token placeholders but no .claude-config.env found in $project_path"
+          exit 1
+        fi
+        while IFS= read -r -d '' md_file; do
+          if [ ! -L "$md_file" ]; then
+            replace_tokens "$md_file"
+          fi
+        done < <(/usr/bin/find "$target/skills/$item_name" -name "*.md" -print0)
+        log "Added skill: $item_name (copied — has tokens)"
+      else
+        log "Added skill: $item_name (symlinked)"
+      fi
+      ;;
+    rule)
+      local src="$SCRIPT_DIR/project/rules/$item_name"
+      if [ ! -f "$src" ]; then
+        error "Rule not found: $item_name"
+        echo "  Available:"
+        ls "$SCRIPT_DIR/project/rules/"
+        exit 1
+      fi
+      mkdir -p "$target/rules"
+      install_file "$src" "$target/rules/$item_name" false "$link_mode" false
+      log "Added rule: $item_name"
+      ;;
+    command)
+      local src="$SCRIPT_DIR/project/commands/$item_name"
+      if [ ! -f "$src" ]; then
+        error "Command not found: $item_name"
+        echo "  Available:"
+        ls "$SCRIPT_DIR/project/commands/"
+        exit 1
+      fi
+      mkdir -p "$target/commands"
+      local cmd_has_tokens=false
+      if has_tokens "$src"; then
+        cmd_has_tokens=true
+      fi
+      install_file "$src" "$target/commands/$item_name" false "$link_mode" "$cmd_has_tokens"
+      if [ "$cmd_has_tokens" = true ]; then
+        if [ "$has_config" = false ]; then
+          error "Command '$item_name' has token placeholders but no .claude-config.env found in $project_path"
+          exit 1
+        fi
+        replace_tokens "$target/commands/$item_name"
+        log "Added command: $item_name (copied — has tokens)"
+      else
+        log "Added command: $item_name (symlinked)"
+      fi
+      ;;
+    agent)
+      local src="$SCRIPT_DIR/project/agents/$item_name"
+      if [ ! -f "$src" ]; then
+        error "Agent not found: $item_name"
+        echo "  Available:"
+        ls "$SCRIPT_DIR/project/agents/"
+        exit 1
+      fi
+      mkdir -p "$target/agents"
+      install_file "$src" "$target/agents/$item_name" false "$link_mode" false
+      log "Added agent: $item_name"
+      ;;
+    *)
+      error "Unknown type: $item_type (use: skill, rule, command, agent)"
+      exit 1
+      ;;
+  esac
+}
+
 # ---------- Parse args ----------
-GLOBAL=false
-MACHINE=""
 PROJECT_PATH=""
-PROFILE=""
+PROFILES=()
 CONFIG_FILE=""
 UPDATE=false
-LINK=false
+LINK=true
+ADD_TYPE=""
+ADD_NAME=""
 
 if [ $# -eq 0 ]; then
   usage
@@ -487,17 +587,20 @@ fi
 
 for arg in "$@"; do
   case "$arg" in
-    --global)           GLOBAL=true ;;
-    --machine=*)        MACHINE="${arg#--machine=}" ;;
-    --profile=*)        PROFILE="${arg#--profile=}" ;;
+    --profile=*)        PROFILES+=("${arg#--profile=}") ;;
     --config=*)         CONFIG_FILE="${arg#--config=}" ;;
     --update)           UPDATE=true ;;
-    --link)             LINK=true ;;
+    --copy)             LINK=false ;;
+    --add)              ADD_TYPE="__pending__" ;;
     --list-profiles)    list_profiles; exit 0 ;;
     --help|-h)          usage ;;
     -*)                 error "Unknown flag: $arg"; usage ;;
     *)
-      if [ -z "$PROJECT_PATH" ]; then
+      if [ "$ADD_TYPE" = "__pending__" ]; then
+        ADD_TYPE="$arg"
+      elif [ -n "$ADD_TYPE" ] && [ "$ADD_TYPE" != "__pending__" ] && [ -z "$ADD_NAME" ]; then
+        ADD_NAME="$arg"
+      elif [ -z "$PROJECT_PATH" ]; then
         PROJECT_PATH="$arg"
       else
         error "Unexpected argument: $arg"; usage
@@ -507,8 +610,18 @@ for arg in "$@"; do
 done
 
 # ---------- Execute ----------
-if [ "$GLOBAL" = true ]; then
-  install_global "$MACHINE"
+
+# Handle --add command
+if [ -n "$ADD_TYPE" ] && [ "$ADD_TYPE" != "__pending__" ]; then
+  if [ -z "$PROJECT_PATH" ]; then
+    error "Project path required with --add"
+    usage
+  fi
+  if [ -z "$ADD_NAME" ]; then
+    error "Name required: --add <type> <name>"
+    usage
+  fi
+  add_item "$PROJECT_PATH" "$ADD_TYPE" "$ADD_NAME" "$LINK"
   exit 0
 fi
 
@@ -517,25 +630,14 @@ if [ -z "$PROJECT_PATH" ]; then
   usage
 fi
 
-if [ -z "$PROFILE" ]; then
-  echo "Select a profile:"
-  select_idx=0
-  profiles=()
+# No --profile given → install all profiles
+if [ ${#PROFILES[@]} -eq 0 ]; then
   for conf in "$SCRIPT_DIR/profiles/"*.conf; do
-    name="$(basename "${conf%.conf}")"
-    profiles+=("$name")
-    # shellcheck disable=SC1090
-    (source "$conf"; printf "  %d) %-20s %s\n" "$((select_idx + 1))" "$name" "$PROFILE_DESC")
-    ((select_idx++))
+    PROFILES+=("$(basename "${conf%.conf}")")
   done
-  echo ""
-  read -rp "Enter profile number or name: " choice
-
-  if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le ${#profiles[@]} ]; then
-    PROFILE="${profiles[$((choice - 1))]}"
-  else
-    PROFILE="$choice"
-  fi
+  info "No --profile specified — installing all: ${PROFILES[*]}"
 fi
 
-install_project "$PROJECT_PATH" "$PROFILE" "$CONFIG_FILE" "$UPDATE" "$LINK"
+for profile in "${PROFILES[@]}"; do
+  install_project "$PROJECT_PATH" "$profile" "$CONFIG_FILE" "$UPDATE" "$LINK"
+done

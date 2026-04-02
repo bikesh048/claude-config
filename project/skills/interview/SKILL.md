@@ -42,7 +42,8 @@ This ensures questions are **informed, not generic**.
 
 ### 3. Interview Using AskUserQuestion
 
-Ask 2-4 questions per round by prompting the user directly. Continue for multiple rounds until all dimensions are covered.
+Ask 2-4 questions per round by prompting the user directly. Continue for multiple rounds until all dimensions are covered. Ask about: technical implementation, UI/UX, concerns, tradeoffs.
+Make sure the questions are not obvious. Be very in-depth and continue until it's complete. Then write the spec.
 
 **Question Dimensions** (cover all, in roughly this order):
 
