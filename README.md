@@ -19,7 +19,14 @@ git clone git@github.com:TripcartHQ/claude-config.git
 ./setup.sh ~/projects/tripcart-builder --profile=fullstack-ts --profile=laravel-php
 ```
 
-The setup script creates `.claude-secrets` in the project root (gitignored) with project config and API keys. All values are loaded at runtime via environment variables.
+The setup script creates `.claude-secrets` in the project root (gitignored) with project config and API keys. You can also create it manually from the example:
+
+```bash
+cp /path/to/claude-config/.claude-secrets.example ~/projects/your-project/.claude-secrets
+# Edit with your values
+```
+
+All values are loaded at runtime via environment variables.
 
 ### Add a single item later
 
@@ -79,6 +86,7 @@ echo '[ -f .claude-secrets ] && source .claude-secrets' >> ~/.zprofile
 ```
 claude-config/
 ├── setup.sh                # Setup script
+├── .claude-secrets.example # Secrets template
 ├── docs/
 │   └── commands.md         # Command usage reference
 ├── profiles/               # Install profiles
