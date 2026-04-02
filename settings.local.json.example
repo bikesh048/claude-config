@@ -2,7 +2,6 @@
   "env": {
     "OP_BASE_URL": "https://your-openproject-instance.example.com",
     "OP_PROJECT_SLUG": "your-project-slug",
-    "OP_PROJECT_ID": "1",
     "GITHUB_ORG_REPO": "YourOrg/your-repo",
     "BASE_BRANCH": "develop",
     "OPENPROJECT_API_KEY": "your-api-key-here"

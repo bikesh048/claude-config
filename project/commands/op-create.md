@@ -88,9 +88,13 @@ Wait for user confirmation.
 ### 5. Create work package via API
 
 **IMPORTANT**: The project href must use the numeric project ID, not the slug.
-Get it from the parent ticket: `._links.project.href` (currently `/api/v3/projects/${OP_PROJECT_ID}`).
+Extract it from the parent ticket response: `._links.project.href`.
 
 ```bash
+# Get project href from parent ticket
+PROJECT_HREF=$(curl -s "${OP_BASE_URL}/api/v3/work_packages/${PARENT_ID}" \
+  -u "apikey:${OPENPROJECT_API_KEY}" | jq -r '._links.project.href')
+
 curl -s -X POST \
   "${OP_BASE_URL}/api/v3/work_packages" \
   -H "Content-Type: application/json" \
@@ -100,7 +104,7 @@ curl -s -X POST \
     "startDate": "YYYY-MM-DD",
     "_links": {
       "type": { "href": "/api/v3/types/TYPE_ID" },
-      "project": { "href": "/api/v3/projects/${OP_PROJECT_ID}" },
+      "project": { "href": "'"${PROJECT_HREF}"'" },
       "parent": { "href": "/api/v3/work_packages/PARENT_ID" }
     }
   }'

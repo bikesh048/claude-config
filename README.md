@@ -64,7 +64,6 @@ Created per project during setup. Contains project config and API keys — loade
   "env": {
     "OP_BASE_URL": "https://openproject.codewingsolutions.com",
     "OP_PROJECT_SLUG": "tripcart-new",
-    "OP_PROJECT_ID": "5",
     "GITHUB_ORG_REPO": "TripcartHQ/tripcart-builder",
     "BASE_BRANCH": "develop",
     "OPENPROJECT_API_KEY": "your-api-key"
@@ -79,7 +78,7 @@ Commands use `$OP_BASE_URL`, `$OPENPROJECT_API_KEY` etc. at runtime. Add project
 ```
 claude-config/
 ├── setup.sh                      # Setup script
-├── settings.local.example.json   # Settings template
+├── settings.local.json.example   # Settings template
 ├── docs/
 │   └── commands.md               # Command usage reference
 ├── profiles/

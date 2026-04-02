@@ -89,7 +89,6 @@ create_local_settings() {
 
   read -rp "OpenProject base URL: " OP_BASE_URL
   read -rp "OpenProject project slug: " OP_PROJECT_SLUG
-  read -rp "OpenProject project ID: " OP_PROJECT_ID
   read -rp "GitHub org/repo: " GITHUB_ORG_REPO
   read -rp "Base branch [develop]: " BASE_BRANCH
   BASE_BRANCH="${BASE_BRANCH:-develop}"
@@ -100,7 +99,6 @@ create_local_settings() {
   "env": {
     "OP_BASE_URL": "${OP_BASE_URL}",
     "OP_PROJECT_SLUG": "${OP_PROJECT_SLUG}",
-    "OP_PROJECT_ID": "${OP_PROJECT_ID}",
     "GITHUB_ORG_REPO": "${GITHUB_ORG_REPO}",
     "BASE_BRANCH": "${BASE_BRANCH}",
     "OPENPROJECT_API_KEY": "${OPENPROJECT_API_KEY}"
