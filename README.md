@@ -9,7 +9,7 @@ Shared Claude Code configuration for all TripcartHQ projects. Provides standardi
 ```bash
 git clone git@github.com:TripcartHQ/claude-config.git
 
-# Install (prompts to create .claude-secrets on first run)
+# Install (prompts to create settings.local.json on first run)
 ./setup.sh ~/projects/tripcart-builder --profile=fullstack-ts
 
 # Install all profiles at once
@@ -19,14 +19,11 @@ git clone git@github.com:TripcartHQ/claude-config.git
 ./setup.sh ~/projects/tripcart-builder --profile=fullstack-ts --profile=laravel-php
 ```
 
-The setup script creates `.claude-secrets` in the project root (gitignored) with project config and API keys. You can also create it manually from the example:
-
+Or create `settings.local.json` manually:
 ```bash
-cp /path/to/claude-config/.claude-secrets.example ~/projects/your-project/.claude-secrets
+cp /path/to/claude-config/settings.local.example.json ~/projects/your-project/.claude/settings.local.json
 # Edit with your values
 ```
-
-All values are loaded at runtime via environment variables.
 
 ### Add a single item later
 
@@ -43,8 +40,6 @@ All values are loaded at runtime via environment variables.
 ./setup.sh ~/projects/tripcart-builder --update
 ```
 
-Shows diffs and prompts accept/skip per file.
-
 ## What Gets Installed
 
 Everything goes into the project's `.claude/` directory:
@@ -57,42 +52,40 @@ Everything goes into the project's `.claude/` directory:
 | `agents/` | Code reviewer, security auditor |
 | `commands/` | create-pr, deliver, dispatch, op-create, op-read, op-update |
 | `skills/` | interview, playwright-cli |
-| `settings.json` | Shared permissions + deny list |
+| `settings.json` | Shared permissions (committed) |
+| `settings.local.json` | Project config + API keys (gitignored) |
 
-Plus `.claude-secrets` in the project root (gitignored).
+## settings.local.json
 
-## .claude-secrets
+Created per project during setup. Contains project config and API keys — loaded automatically by Claude Code at session start, zero context cost.
 
-Created per project during setup. Contains project config and API keys:
-
-```bash
-export OP_BASE_URL="https://openproject.codewingsolutions.com"
-export OP_PROJECT_SLUG="tripcart-new"
-export OP_PROJECT_ID="5"
-export GITHUB_ORG_REPO="TripcartHQ/tripcart-builder"
-export BASE_BRANCH="develop"
-export OPENPROJECT_API_KEY="your-api-key"
+```json
+{
+  "env": {
+    "OP_BASE_URL": "https://openproject.codewingsolutions.com",
+    "OP_PROJECT_SLUG": "tripcart-new",
+    "OP_PROJECT_ID": "5",
+    "GITHUB_ORG_REPO": "TripcartHQ/tripcart-builder",
+    "BASE_BRANCH": "develop",
+    "OPENPROJECT_API_KEY": "your-api-key"
+  }
+}
 ```
 
-Commands use `$OP_BASE_URL`, `$OPENPROJECT_API_KEY` etc. at runtime. Add project-specific credentials (dashboard login, etc.) here too.
-
-Source it in your shell profile:
-```bash
-echo '[ -f .claude-secrets ] && source .claude-secrets' >> ~/.zprofile
-```
+Commands use `$OP_BASE_URL`, `$OPENPROJECT_API_KEY` etc. at runtime. Add project-specific credentials (dashboard login, etc.) to the `env` section too.
 
 ## Repo Structure
 
 ```
 claude-config/
-├── setup.sh                # Setup script
-├── .claude-secrets.example # Secrets template
+├── setup.sh                      # Setup script
+├── settings.local.example.json   # Settings template
 ├── docs/
-│   └── commands.md         # Command usage reference
-├── profiles/               # Install profiles
+│   └── commands.md               # Command usage reference
+├── profiles/
 │   ├── fullstack-ts.conf
 │   └── laravel-php.conf
-└── project/                # → .claude/ in target project
+└── project/                      # -> .claude/ in target project
     ├── settings.json
     ├── agents/
     ├── commands/
@@ -110,21 +103,6 @@ claude-config/
 |------|------|----------|
 | **Symlink** (default) | All files | Edit once, all projects update |
 | **Copy** (`--copy`) | Override default | Independent copies, no sync |
-
-## Personal Overrides
-
-Create `.claude/settings.local.json` in your project for personal permission overrides:
-
-```json
-{
-  "permissions": {
-    "allow": [
-      "Bash(npx jest:*)",
-      "Bash(docker compose *)"
-    ]
-  }
-}
-```
 
 ## Command Reference
 

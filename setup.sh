@@ -66,17 +66,24 @@ list_profiles() {
   done
 }
 
-# ---------- Create .claude-secrets ----------
-create_secrets() {
+# ---------- Create settings.local.json ----------
+create_local_settings() {
   local project_path="$1"
-  local secrets_file="$project_path/.claude-secrets"
+  local local_settings="$project_path/.claude/settings.local.json"
 
-  if [ -f "$secrets_file" ]; then
-    warn ".claude-secrets already exists — skipping"
+  # Ensure settings.local.json is gitignored regardless
+  local gitignore="$project_path/.gitignore"
+  if ! grep -q 'settings.local.json' "$gitignore" 2>/dev/null; then
+    echo ".claude/settings.local.json" >> "$gitignore"
+    log "Added settings.local.json to .gitignore"
+  fi
+
+  if [ -f "$local_settings" ]; then
+    warn "settings.local.json already exists — skipping"
     return
   fi
 
-  header "Create .claude-secrets"
+  header "Create settings.local.json"
   echo "  This file stores project config and API keys (gitignored)."
   echo ""
 
@@ -88,22 +95,20 @@ create_secrets() {
   BASE_BRANCH="${BASE_BRANCH:-develop}"
   read -rp "OpenProject API key: " OPENPROJECT_API_KEY
 
-  cat > "$secrets_file" << EOF
-export OP_BASE_URL="${OP_BASE_URL}"
-export OP_PROJECT_SLUG="${OP_PROJECT_SLUG}"
-export OP_PROJECT_ID="${OP_PROJECT_ID}"
-export GITHUB_ORG_REPO="${GITHUB_ORG_REPO}"
-export BASE_BRANCH="${BASE_BRANCH}"
-export OPENPROJECT_API_KEY="${OPENPROJECT_API_KEY}"
+  cat > "$local_settings" << EOF
+{
+  "env": {
+    "OP_BASE_URL": "${OP_BASE_URL}",
+    "OP_PROJECT_SLUG": "${OP_PROJECT_SLUG}",
+    "OP_PROJECT_ID": "${OP_PROJECT_ID}",
+    "GITHUB_ORG_REPO": "${GITHUB_ORG_REPO}",
+    "BASE_BRANCH": "${BASE_BRANCH}",
+    "OPENPROJECT_API_KEY": "${OPENPROJECT_API_KEY}"
+  }
+}
 EOF
-  chmod 600 "$secrets_file"
-  log "Created .claude-secrets"
+  log "Created settings.local.json"
 
-  # Add to .gitignore if not already there
-  if ! grep -q '.claude-secrets' "$project_path/.gitignore" 2>/dev/null; then
-    echo ".claude-secrets" >> "$project_path/.gitignore"
-    log "Added .claude-secrets to .gitignore"
-  fi
 }
 
 # ---------- Exclusion prompt ----------
@@ -217,8 +222,8 @@ install_project() {
   header "Profile: $PROFILE_NAME"
   echo "  $PROFILE_DESC"
 
-  # Create .claude-secrets if it doesn't exist
-  create_secrets "$project_path"
+  # Create settings.local.json if it doesn't exist
+  create_local_settings "$project_path"
 
   # Show what will be installed and allow exclusions
   header "Review items to install"
@@ -362,7 +367,7 @@ install_project() {
     echo "  All files symlinked to claude-config repo."
     echo "  Edits in .claude/ flow back to claude-config automatically."
   fi
-  echo "  Config loaded at runtime from .claude-secrets."
+  echo "  Config loaded at runtime from settings.local.json."
 }
 
 # ---------- Add single item ----------
