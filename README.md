@@ -10,9 +10,10 @@ Shared Claude Code configuration for all TripcartHQ projects. Provides standardi
 git clone git@github.com:TripcartHQ/claude-config.git
 cd claude-config
 
-# Set up secrets
-cp config.example.env ~/.claude-secrets
-# Edit ~/.claude-secrets with your API keys
+# Set up secrets (API keys only — not project tokens)
+cat > ~/.claude-secrets << 'EOF'
+export OPENPROJECT_API_KEY="your-api-key-here"
+EOF
 chmod 600 ~/.claude-secrets
 
 # Add to your shell profile (~/.zprofile or ~/.zshrc)
