@@ -355,9 +355,6 @@ install_project() {
     done
   fi
 
-  # --- Save config version ---
-  echo "$profile_name:$(date +%Y%m%d%H%M%S):$mode_label" > "$target/.config-version"
-
   echo ""
   log "Profile installed: $PROFILE_NAME (mode: $mode_label)"
   echo ""
