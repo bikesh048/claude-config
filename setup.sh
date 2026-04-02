@@ -26,7 +26,6 @@ Usage:
 
 Options:
   --profile=<name>      Project profile (repeatable). No --profile = install all.
-  --config=<file>       Token values file (or uses .claude-config.env in project)
   --update              Update mode: show diffs, prompt accept/skip per file
   --copy                Copy mode: copy files instead of symlinking (default is symlink).
                         Use when you want project-specific overrides that don't flow back.
@@ -67,72 +66,44 @@ list_profiles() {
   done
 }
 
-# ---------- Token replacement ----------
-replace_tokens() {
-  local file="$1"
-  local sed_i
+# ---------- Create .claude-secrets ----------
+create_secrets() {
+  local project_path="$1"
+  local secrets_file="$project_path/.claude-secrets"
 
-  if [[ "$OSTYPE" == "darwin"* ]]; then
-    sed_i="sed -i ''"
-  else
-    sed_i="sed -i"
+  if [ -f "$secrets_file" ]; then
+    warn ".claude-secrets already exists — skipping"
+    return
   fi
 
-  $sed_i \
-    -e "s|{{OP_BASE_URL}}|${OP_BASE_URL}|g" \
-    -e "s|{{OP_PROJECT_SLUG}}|${OP_PROJECT_SLUG}|g" \
-    -e "s|{{OP_PROJECT_ID}}|${OP_PROJECT_ID}|g" \
-    -e "s|{{GITHUB_ORG_REPO}}|${GITHUB_ORG_REPO}|g" \
-    -e "s|{{BASE_BRANCH}}|${BASE_BRANCH}|g" \
-    "$file"
-}
-
-# ---------- Load config ----------
-load_config() {
-  local config_file="$1"
-
-  if [ ! -f "$config_file" ]; then
-    error "Config file not found: $config_file"
-    exit 1
-  fi
-
-  # shellcheck disable=SC1090
-  source "$config_file"
-
-  local missing=()
-  [ -z "${OP_BASE_URL:-}" ] && missing+=("OP_BASE_URL")
-  [ -z "${OP_PROJECT_SLUG:-}" ] && missing+=("OP_PROJECT_SLUG")
-  [ -z "${OP_PROJECT_ID:-}" ] && missing+=("OP_PROJECT_ID")
-  [ -z "${GITHUB_ORG_REPO:-}" ] && missing+=("GITHUB_ORG_REPO")
-  [ -z "${BASE_BRANCH:-}" ] && missing+=("BASE_BRANCH")
-
-  if [ ${#missing[@]} -gt 0 ]; then
-    error "Missing required config vars: ${missing[*]}"
-    exit 1
-  fi
-}
-
-# ---------- Interactive config ----------
-interactive_config() {
-  header "Enter project token values"
+  header "Create .claude-secrets"
+  echo "  This file stores project config and API keys (gitignored)."
   echo ""
 
   read -rp "OpenProject base URL: " OP_BASE_URL
-  OP_BASE_URL="${OP_BASE_URL:?OpenProject base URL is required}"
-
   read -rp "OpenProject project slug: " OP_PROJECT_SLUG
-  OP_PROJECT_SLUG="${OP_PROJECT_SLUG:?OpenProject project slug is required}"
-
   read -rp "OpenProject project ID: " OP_PROJECT_ID
-  OP_PROJECT_ID="${OP_PROJECT_ID:?OpenProject project ID is required}"
-
   read -rp "GitHub org/repo: " GITHUB_ORG_REPO
-  GITHUB_ORG_REPO="${GITHUB_ORG_REPO:?GitHub org/repo is required}"
+  read -rp "Base branch [develop]: " BASE_BRANCH
+  BASE_BRANCH="${BASE_BRANCH:-develop}"
+  read -rp "OpenProject API key: " OPENPROJECT_API_KEY
 
-  read -rp "Base branch [main]: " BASE_BRANCH
-  BASE_BRANCH="${BASE_BRANCH:-main}"
+  cat > "$secrets_file" << EOF
+export OP_BASE_URL="${OP_BASE_URL}"
+export OP_PROJECT_SLUG="${OP_PROJECT_SLUG}"
+export OP_PROJECT_ID="${OP_PROJECT_ID}"
+export GITHUB_ORG_REPO="${GITHUB_ORG_REPO}"
+export BASE_BRANCH="${BASE_BRANCH}"
+export OPENPROJECT_API_KEY="${OPENPROJECT_API_KEY}"
+EOF
+  chmod 600 "$secrets_file"
+  log "Created .claude-secrets"
 
-  export OP_BASE_URL OP_PROJECT_SLUG OP_PROJECT_ID GITHUB_ORG_REPO BASE_BRANCH
+  # Add to .gitignore if not already there
+  if ! grep -q '.claude-secrets' "$project_path/.gitignore" 2>/dev/null; then
+    echo ".claude-secrets" >> "$project_path/.gitignore"
+    log "Added .claude-secrets to .gitignore"
+  fi
 }
 
 # ---------- Exclusion prompt ----------
@@ -177,38 +148,22 @@ prompt_exclusions() {
   fi
 }
 
-# ---------- Check if file contains token placeholders ----------
-has_tokens() {
-  grep -q '{{.\+}}' "$1" 2>/dev/null
-}
-
-# ---------- Install a single file (copy, link, or update) ----------
+# ---------- Install a single file (symlink, copy, or update) ----------
 install_file() {
   local src="$1"
   local dest="$2"
   local update_mode="${3:-false}"
   local link_mode="${4:-false}"
-  local needs_tokens="${5:-false}"
 
   if [ "$update_mode" = true ] && [ -f "$dest" ]; then
-    # For symlinks in update mode, compare against the resolved source
-    local cmp_src="$src"
-    if [ -L "$dest" ]; then
-      local current_target
-      current_target="$(readlink "$dest")"
-      # If already linked to the right place, no change needed
-      if [ "$link_mode" = true ] && [ "$needs_tokens" = false ]; then
-        local abs_src
-        abs_src="$(cd "$(dirname "$src")" && pwd)/$(basename "$src")"
-        local abs_target
-        abs_target="$(cd "$(dirname "$dest")" && pwd)/$current_target"
-        if [ "$abs_src" = "$(realpath "$dest")" ]; then
-          return 1  # Already linked correctly
-        fi
+    # If already linked to the right place, no change needed
+    if [ -L "$dest" ] && [ "$link_mode" = true ]; then
+      if [ "$src" = "$(realpath "$dest")" ]; then
+        return 1
       fi
     fi
 
-    if diff -q "$cmp_src" "$dest" > /dev/null 2>&1; then
+    if diff -q "$src" "$dest" > /dev/null 2>&1; then
       return 1  # No change
     fi
 
@@ -225,7 +180,7 @@ install_file() {
   # Remove existing file/symlink before installing
   [ -e "$dest" ] || [ -L "$dest" ] && rm -f "$dest"
 
-  if [ "$link_mode" = true ] && [ "$needs_tokens" = false ]; then
+  if [ "$link_mode" = true ]; then
     ln -s "$src" "$dest"
   else
     cp "$src" "$dest"
@@ -237,9 +192,8 @@ install_file() {
 install_project() {
   local project_path="$1"
   local profile_name="$2"
-  local config_file="${3:-}"
-  local update_mode="${4:-false}"
-  local link_mode="${5:-false}"
+  local update_mode="${3:-false}"
+  local link_mode="${4:-false}"
 
   if [ ! -d "$project_path" ]; then
     error "Project path not found: $project_path"
@@ -263,15 +217,8 @@ install_project() {
   header "Profile: $PROFILE_NAME"
   echo "  $PROFILE_DESC"
 
-  # Load token config
-  if [ -n "$config_file" ]; then
-    load_config "$config_file"
-  elif [ -f "$project_path/.claude-config.env" ]; then
-    load_config "$project_path/.claude-config.env"
-    log "Loaded config from $project_path/.claude-config.env"
-  else
-    interactive_config
-  fi
+  # Create .claude-secrets if it doesn't exist
+  create_secrets "$project_path"
 
   # Show what will be installed and allow exclusions
   header "Review items to install"
@@ -291,7 +238,7 @@ install_project() {
   header "Installing to $target (mode: $mode_label)"
 
   # settings.json is always copied (project-specific permissions)
-  if install_file "$SCRIPT_DIR/project/settings.json" "$target/settings.json" "$update_mode" false false; then
+  if install_file "$SCRIPT_DIR/project/settings.json" "$target/settings.json" "$update_mode" false; then
     log "Installed settings.json (copied)"
   fi
 
@@ -305,7 +252,7 @@ install_project() {
           [ -f "$rule_file" ] || continue
           local fname
           fname="$(basename "$rule_file")"
-          if install_file "$rule_file" "$target/rules/$dir/$fname" "$update_mode" "$link_mode" false; then
+          if install_file "$rule_file" "$target/rules/$dir/$fname" "$update_mode" "$link_mode"; then
             log "Installed rule: $dir/$fname"
           fi
         done
@@ -321,7 +268,7 @@ install_project() {
     for rule in "${RULES[@]}"; do
       local src="$SCRIPT_DIR/project/rules/$rule"
       if [ -f "$src" ]; then
-        if install_file "$src" "$target/rules/$rule" "$update_mode" "$link_mode" false; then
+        if install_file "$src" "$target/rules/$rule" "$update_mode" "$link_mode"; then
           log "Installed rule: $rule"
         fi
       else
@@ -336,7 +283,7 @@ install_project() {
     for agent in "${AGENTS[@]}"; do
       local src="$SCRIPT_DIR/project/agents/$agent"
       if [ -f "$src" ]; then
-        if install_file "$src" "$target/agents/$agent" "$update_mode" "$link_mode" false; then
+        if install_file "$src" "$target/agents/$agent" "$update_mode" "$link_mode"; then
           log "Installed agent: $agent"
         fi
       else
@@ -351,17 +298,8 @@ install_project() {
     for cmd in "${COMMANDS[@]}"; do
       local src="$SCRIPT_DIR/project/commands/$cmd"
       if [ -f "$src" ]; then
-        local cmd_has_tokens=false
-        if has_tokens "$src"; then
-          cmd_has_tokens=true
-        fi
-        if install_file "$src" "$target/commands/$cmd" "$update_mode" "$link_mode" "$cmd_has_tokens"; then
-          if [ "$cmd_has_tokens" = true ]; then
-            replace_tokens "$target/commands/$cmd"
-            log "Installed command: $cmd (copied — has tokens)"
-          else
-            log "Installed command: $cmd"
-          fi
+        if install_file "$src" "$target/commands/$cmd" "$update_mode" "$link_mode"; then
+          log "Installed command: $cmd"
         fi
       else
         warn "Command not found: $cmd (skipped)"
@@ -376,28 +314,13 @@ install_project() {
       if [ -d "$src_dir" ]; then
         mkdir -p "$target/skills/$skill"
         local skill_changed=false
-        local skill_has_tokens=false
         while IFS= read -r -d '' file; do
           local rel="${file#"$src_dir"/}"
           mkdir -p "$target/skills/$skill/$(dirname "$rel")"
-          local file_has_tokens=false
-          if has_tokens "$file"; then
-            file_has_tokens=true
-            skill_has_tokens=true
-          fi
-          if install_file "$file" "$target/skills/$skill/$rel" "$update_mode" "$link_mode" "$file_has_tokens"; then
+          if install_file "$file" "$target/skills/$skill/$rel" "$update_mode" "$link_mode"; then
             skill_changed=true
           fi
-        done < <(find "$src_dir" -type f -print0)
-
-        # Replace tokens only in copied files (not symlinks)
-        if [ "$skill_changed" = true ] && [ "$skill_has_tokens" = true ]; then
-          while IFS= read -r -d '' md_file; do
-            if [ ! -L "$md_file" ]; then
-              replace_tokens "$md_file"
-            fi
-          done < <(find "$target/skills/$skill" -name "*.md" -print0)
-        fi
+        done < <(/usr/bin/find "$src_dir" -type f -print0)
         if [ "$skill_changed" = true ]; then
           log "Installed skill: $skill"
         fi
@@ -416,11 +339,11 @@ install_project() {
       if [ -f "$src" ]; then
         local dest="$project_path/.github/$tmpl"
         if [ "$update_mode" = true ]; then
-          if install_file "$src" "$dest" "$update_mode" "$link_mode" false; then
+          if install_file "$src" "$dest" "$update_mode" "$link_mode"; then
             log "Installed template: $tmpl"
           fi
         elif [ ! -f "$dest" ]; then
-          install_file "$src" "$dest" false "$link_mode" false
+          install_file "$src" "$dest" false "$link_mode"
           log "Installed template: $tmpl"
         else
           warn "Template already exists: $tmpl (skipped)"
@@ -433,27 +356,13 @@ install_project() {
   echo "$profile_name:$(date +%Y%m%d%H%M%S):$mode_label" > "$target/.config-version"
 
   echo ""
-  log "Project install complete! (profile: $PROFILE_NAME, mode: $mode_label)"
-  echo ""
-  echo "  Tokens applied:"
-  echo "    OP_BASE_URL     = $OP_BASE_URL"
-  echo "    OP_PROJECT_SLUG = $OP_PROJECT_SLUG"
-  echo "    OP_PROJECT_ID   = $OP_PROJECT_ID"
-  echo "    GITHUB_ORG_REPO = $GITHUB_ORG_REPO"
-  echo "    BASE_BRANCH     = $BASE_BRANCH"
+  log "Profile installed: $PROFILE_NAME (mode: $mode_label)"
   echo ""
   if [ "$link_mode" = true ]; then
-    echo "  Link mode active:"
-    echo "    - Most files are symlinked to claude-config repo"
-    echo "    - Edits in .claude/ flow back to claude-config automatically"
-    echo "    - Files with token placeholders were copied (not linked)"
-    echo "    - Add symlinked dirs to .gitignore if not committing them"
-  else
-    echo "  Next steps:"
-    echo "    1. Review .claude/settings.json and adjust allow/deny as needed"
-    echo "    2. Create .claude/settings.local.json for personal overrides"
-    echo "    3. Commit .claude/ to your project repo"
+    echo "  All files symlinked to claude-config repo."
+    echo "  Edits in .claude/ flow back to claude-config automatically."
   fi
+  echo "  Config loaded at runtime from .claude-secrets."
 }
 
 # ---------- Add single item ----------
@@ -470,14 +379,6 @@ add_item() {
 
   local target="$project_path/.claude"
 
-  # Load config for token replacement
-  local config_file="$project_path/.claude-config.env"
-  local has_config=false
-  if [ -f "$config_file" ]; then
-    load_config "$config_file"
-    has_config=true
-  fi
-
   case "$item_type" in
     skill)
       local src_dir="$SCRIPT_DIR/project/skills/$item_name"
@@ -490,31 +391,12 @@ add_item() {
         exit 1
       fi
       mkdir -p "$target/skills/$item_name"
-      local skill_has_tokens=false
       while IFS= read -r -d '' file; do
         local rel="${file#"$src_dir"/}"
         mkdir -p "$target/skills/$item_name/$(dirname "$rel")"
-        local file_has_tokens=false
-        if has_tokens "$file"; then
-          file_has_tokens=true
-          skill_has_tokens=true
-        fi
-        install_file "$file" "$target/skills/$item_name/$rel" false "$link_mode" "$file_has_tokens"
+        install_file "$file" "$target/skills/$item_name/$rel" false "$link_mode"
       done < <(/usr/bin/find "$src_dir" -type f -print0)
-      if [ "$skill_has_tokens" = true ]; then
-        if [ "$has_config" = false ]; then
-          error "Skill '$item_name' has token placeholders but no .claude-config.env found in $project_path"
-          exit 1
-        fi
-        while IFS= read -r -d '' md_file; do
-          if [ ! -L "$md_file" ]; then
-            replace_tokens "$md_file"
-          fi
-        done < <(/usr/bin/find "$target/skills/$item_name" -name "*.md" -print0)
-        log "Added skill: $item_name (copied — has tokens)"
-      else
-        log "Added skill: $item_name (symlinked)"
-      fi
+      log "Added skill: $item_name"
       ;;
     rule)
       local src="$SCRIPT_DIR/project/rules/$item_name"
@@ -525,7 +407,7 @@ add_item() {
         exit 1
       fi
       mkdir -p "$target/rules"
-      install_file "$src" "$target/rules/$item_name" false "$link_mode" false
+      install_file "$src" "$target/rules/$item_name" false "$link_mode"
       log "Added rule: $item_name"
       ;;
     command)
@@ -537,21 +419,8 @@ add_item() {
         exit 1
       fi
       mkdir -p "$target/commands"
-      local cmd_has_tokens=false
-      if has_tokens "$src"; then
-        cmd_has_tokens=true
-      fi
-      install_file "$src" "$target/commands/$item_name" false "$link_mode" "$cmd_has_tokens"
-      if [ "$cmd_has_tokens" = true ]; then
-        if [ "$has_config" = false ]; then
-          error "Command '$item_name' has token placeholders but no .claude-config.env found in $project_path"
-          exit 1
-        fi
-        replace_tokens "$target/commands/$item_name"
-        log "Added command: $item_name (copied — has tokens)"
-      else
-        log "Added command: $item_name (symlinked)"
-      fi
+      install_file "$src" "$target/commands/$item_name" false "$link_mode"
+      log "Added command: $item_name"
       ;;
     agent)
       local src="$SCRIPT_DIR/project/agents/$item_name"
@@ -562,7 +431,7 @@ add_item() {
         exit 1
       fi
       mkdir -p "$target/agents"
-      install_file "$src" "$target/agents/$item_name" false "$link_mode" false
+      install_file "$src" "$target/agents/$item_name" false "$link_mode"
       log "Added agent: $item_name"
       ;;
     *)
@@ -575,7 +444,6 @@ add_item() {
 # ---------- Parse args ----------
 PROJECT_PATH=""
 PROFILES=()
-CONFIG_FILE=""
 UPDATE=false
 LINK=true
 ADD_TYPE=""
@@ -588,7 +456,6 @@ fi
 for arg in "$@"; do
   case "$arg" in
     --profile=*)        PROFILES+=("${arg#--profile=}") ;;
-    --config=*)         CONFIG_FILE="${arg#--config=}" ;;
     --update)           UPDATE=true ;;
     --copy)             LINK=false ;;
     --add)              ADD_TYPE="__pending__" ;;
@@ -639,5 +506,5 @@ if [ ${#PROFILES[@]} -eq 0 ]; then
 fi
 
 for profile in "${PROFILES[@]}"; do
-  install_project "$PROJECT_PATH" "$profile" "$CONFIG_FILE" "$UPDATE" "$LINK"
+  install_project "$PROJECT_PATH" "$profile" "$UPDATE" "$LINK"
 done

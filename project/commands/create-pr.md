@@ -71,7 +71,7 @@ Use `gh pr create` with this template (matches `.github/pull_request_template.md
 ```
 gh pr create --base develop --title "<type>: <short description>" --body "$(cat <<'PREOF'
 ## Ticket
-[OP#XXXX]({{OP_BASE_URL}}/projects/{{OP_PROJECT_SLUG}}/work_packages/XXXX/activity)
+[OP#XXXX](${OP_BASE_URL}/projects/${OP_PROJECT_SLUG}/work_packages/XXXX/activity)
 
 ## Summary
 <Brief description of what changed and why>

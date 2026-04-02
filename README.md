@@ -4,49 +4,36 @@ Shared Claude Code configuration for all TripcartHQ projects. Provides standardi
 
 ## Quick Start
 
-### New team member
-
-```bash
-git clone git@github.com:TripcartHQ/claude-config.git
-cd claude-config
-
-# Set up secrets (API keys only — not project tokens)
-cat > ~/.claude-secrets << 'EOF'
-export OPENPROJECT_API_KEY="your-api-key-here"
-EOF
-chmod 600 ~/.claude-secrets
-
-# Add to your shell profile (~/.zprofile or ~/.zshrc)
-echo '[ -f ~/.claude-secrets ] && source ~/.claude-secrets' >> ~/.zprofile
-```
-
 ### Install into a project
 
 ```bash
-# Option 1: Interactive (prompts for values)
-./setup.sh /path/to/your-project --profile=fullstack-ts
+git clone git@github.com:TripcartHQ/claude-config.git
 
-# Option 2: From config file
-cp config.example.env /path/to/your-project/.claude-config.env
-# Edit .claude-config.env with project values
-./setup.sh /path/to/your-project --profile=fullstack-ts
+# Install (prompts to create .claude-secrets on first run)
+./setup.sh ~/projects/tripcart-builder --profile=fullstack-ts
+
+# Install all profiles at once
+./setup.sh ~/projects/tripcart-builder
+
+# Install multiple profiles
+./setup.sh ~/projects/tripcart-builder --profile=fullstack-ts --profile=laravel-php
 ```
 
-By default, files are **symlinked** back to this repo. Edits in any project flow back here automatically. Use `--copy` if you want independent copies instead.
+The setup script creates `.claude-secrets` in the project root (gitignored) with project config and API keys. All values are loaded at runtime via environment variables.
 
-### Add a single item
+### Add a single item later
 
 ```bash
-./setup.sh /path/to/project --add skill my-skill
-./setup.sh /path/to/project --add rule my-rule.md
-./setup.sh /path/to/project --add command my-cmd.md
-./setup.sh /path/to/project --add agent my-agent.md
+./setup.sh ~/projects/tripcart-builder --add skill my-skill
+./setup.sh ~/projects/tripcart-builder --add rule my-rule.md
+./setup.sh ~/projects/tripcart-builder --add command my-cmd.md
+./setup.sh ~/projects/tripcart-builder --add agent my-agent.md
 ```
 
 ### Update an existing project
 
 ```bash
-./setup.sh /path/to/your-project --profile=fullstack-ts --update
+./setup.sh ~/projects/tripcart-builder --update
 ```
 
 Shows diffs and prompts accept/skip per file.
@@ -65,32 +52,33 @@ Everything goes into the project's `.claude/` directory:
 | `skills/` | interview, playwright-cli |
 | `settings.json` | Shared permissions + deny list |
 
-## Configuration Tokens
+Plus `.claude-secrets` in the project root (gitignored).
 
-The install script replaces these tokens in files that need project-specific values (these files are copied, not symlinked):
+## .claude-secrets
 
-| Token | Description |
-|-------|-------------|
-| `{{OP_BASE_URL}}` | OpenProject instance URL |
-| `{{OP_PROJECT_SLUG}}` | OP project identifier |
-| `{{OP_PROJECT_ID}}` | OP numeric project ID |
-| `{{GITHUB_ORG_REPO}}` | GitHub org/repo |
-| `{{BASE_BRANCH}}` | Default PR target branch |
+Created per project during setup. Contains project config and API keys:
 
-## Environment Variables
+```bash
+export OP_BASE_URL="https://openproject.codewingsolutions.com"
+export OP_PROJECT_SLUG="tripcart-new"
+export OP_PROJECT_ID="5"
+export GITHUB_ORG_REPO="TripcartHQ/tripcart-builder"
+export BASE_BRANCH="develop"
+export OPENPROJECT_API_KEY="your-api-key"
+```
 
-Required in your environment (via `~/.claude-secrets`):
+Commands use `$OP_BASE_URL`, `$OPENPROJECT_API_KEY` etc. at runtime. Add project-specific credentials (dashboard login, etc.) here too.
 
-| Variable | Purpose |
-|----------|---------|
-| `OPENPROJECT_API_KEY` | OP API authentication |
+Source it in your shell profile:
+```bash
+echo '[ -f .claude-secrets ] && source .claude-secrets' >> ~/.zprofile
+```
 
 ## Repo Structure
 
 ```
 claude-config/
-├── setup.sh              # Install script
-├── config.example.env      # Token values template
+├── setup.sh                # Setup script
 ├── docs/
 │   └── commands.md         # Command usage reference
 ├── profiles/               # Install profiles
@@ -101,9 +89,9 @@ claude-config/
     ├── agents/
     ├── commands/
     ├── rules/
-    │   ├── common/         # Shared coding standards
-    │   ├── typescript/     # TS-specific rules
-    │   └── *.md            # Project rules
+    │   ├── common/
+    │   ├── typescript/
+    │   └── *.md
     ├── skills/
     └── templates/
 ```
@@ -112,8 +100,7 @@ claude-config/
 
 | Mode | When | Behavior |
 |------|------|----------|
-| **Symlink** (default) | Shared files | Edit once, all projects update |
-| **Copy** (auto) | Files with `{{tokens}}` | Project-specific values baked in |
+| **Symlink** (default) | All files | Edit once, all projects update |
 | **Copy** (`--copy`) | Override default | Independent copies, no sync |
 
 ## Personal Overrides
@@ -130,3 +117,7 @@ Create `.claude/settings.local.json` in your project for personal permission ove
   }
 }
 ```
+
+## Command Reference
+
+See [docs/commands.md](docs/commands.md) for usage of all commands.

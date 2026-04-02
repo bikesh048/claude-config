@@ -28,7 +28,7 @@ If no ticket ID can be resolved, ask the user.
 
 ```bash
 curl -s \
-  "{{OP_BASE_URL}}/api/v3/work_packages/${TICKET_ID}" \
+  "${OP_BASE_URL}/api/v3/work_packages/${TICKET_ID}" \
   -H "Content-Type: application/json" \
   -u "apikey:${OPENPROJECT_API_KEY}" \
   | jq '{
@@ -86,7 +86,7 @@ Slugify the subject (lowercase, spaces to hyphens, strip special chars, max 50 c
 Show proposed branch name, let user override, then:
 
 ```bash
-git checkout {{BASE_BRANCH}} && git pull origin {{BASE_BRANCH}} && git checkout -b "${BRANCH}"
+git checkout ${BASE_BRANCH} && git pull origin ${BASE_BRANCH} && git checkout -b "${BRANCH}"
 ```
 
 **Update ticket status** to "In progress" (status ID: 7):
@@ -96,12 +96,12 @@ Always fetch the current `lockVersion` before updating:
 
 ```bash
 # 1. Get current lockVersion
-LOCK=$(curl -s "{{OP_BASE_URL}}/api/v3/work_packages/${TICKET_ID}" \
+LOCK=$(curl -s "${OP_BASE_URL}/api/v3/work_packages/${TICKET_ID}" \
   -u "apikey:${OPENPROJECT_API_KEY}" | jq '.lockVersion')
 
 # 2. Update with lockVersion
 curl -s -X PATCH \
-  "{{OP_BASE_URL}}/api/v3/work_packages/${TICKET_ID}" \
+  "${OP_BASE_URL}/api/v3/work_packages/${TICKET_ID}" \
   -H "Content-Type: application/json" \
   -u "apikey:${OPENPROJECT_API_KEY}" \
   -d "{\"lockVersion\": ${LOCK}, \"_links\":{\"status\":{\"href\":\"/api/v3/statuses/7\"}}}"
@@ -124,6 +124,6 @@ If yes, invoke `/plan` based on the ticket description.
 
 ## Constants
 
-- **Base URL**: `{{OP_BASE_URL}}`
-- **Project**: `{{OP_PROJECT_SLUG}}`
-- **Ticket URL pattern**: `{{OP_BASE_URL}}/projects/{{OP_PROJECT_SLUG}}/work_packages/${TICKET_ID}`
+- **Base URL**: `${OP_BASE_URL}`
+- **Project**: `${OP_PROJECT_SLUG}`
+- **Ticket URL pattern**: `${OP_BASE_URL}/projects/${OP_PROJECT_SLUG}/work_packages/${TICKET_ID}`

@@ -37,10 +37,10 @@ export OPENPROJECT_API_KEY="your-api-key-here"
 
 ### 0. Ensure you're on develop
 
-Before starting, switch to the `{{BASE_BRANCH}}` branch and pull latest:
+Before starting, switch to the `${BASE_BRANCH}` branch and pull latest:
 
 ```bash
-git checkout {{BASE_BRANCH}} && git pull origin {{BASE_BRANCH}}
+git checkout ${BASE_BRANCH} && git pull origin ${BASE_BRANCH}
 ```
 
 If the working tree is dirty, warn the user and ask to stash/commit first.
@@ -55,7 +55,7 @@ If the working tree is dirty, warn the user and ask to stash/commit first.
 ### 2. Fetch parent ticket to confirm it exists
 
 ```bash
-curl -s "{{OP_BASE_URL}}/api/v3/work_packages/${PARENT_ID}" \
+curl -s "${OP_BASE_URL}/api/v3/work_packages/${PARENT_ID}" \
   -u "apikey:${OPENPROJECT_API_KEY}" | jq '{id, subject: .subject, status: ._links.status.title}'
 ```
 
@@ -66,7 +66,7 @@ Print the parent ticket subject so the user can confirm it's the right one.
 If type IDs haven't been confirmed yet, fetch from the types endpoint:
 
 ```bash
-curl -s "{{OP_BASE_URL}}/api/v3/types" \
+curl -s "${OP_BASE_URL}/api/v3/types" \
   -u "apikey:${OPENPROJECT_API_KEY}"
 ```
 
@@ -88,11 +88,11 @@ Wait for user confirmation.
 ### 5. Create work package via API
 
 **IMPORTANT**: The project href must use the numeric project ID, not the slug.
-Get it from the parent ticket: `._links.project.href` (currently `/api/v3/projects/{{OP_PROJECT_ID}}`).
+Get it from the parent ticket: `._links.project.href` (currently `/api/v3/projects/${OP_PROJECT_ID}`).
 
 ```bash
 curl -s -X POST \
-  "{{OP_BASE_URL}}/api/v3/work_packages" \
+  "${OP_BASE_URL}/api/v3/work_packages" \
   -H "Content-Type: application/json" \
   -u "apikey:${OPENPROJECT_API_KEY}" \
   -d '{
@@ -100,7 +100,7 @@ curl -s -X POST \
     "startDate": "YYYY-MM-DD",
     "_links": {
       "type": { "href": "/api/v3/types/TYPE_ID" },
-      "project": { "href": "/api/v3/projects/{{OP_PROJECT_ID}}" },
+      "project": { "href": "/api/v3/projects/${OP_PROJECT_ID}" },
       "parent": { "href": "/api/v3/work_packages/PARENT_ID" }
     }
   }'
@@ -118,7 +118,7 @@ the naming convention from Step 7. Print a summary with **Quick Snippets** for e
 ```
 ✔ Created OP#1750 (Bug): "Fix cache invalidation on publish"
   Parent: OP#1722
-  URL: {{OP_BASE_URL}}/projects/{{OP_PROJECT_SLUG}}/work_packages/1750
+  URL: ${OP_BASE_URL}/projects/${OP_PROJECT_SLUG}/work_packages/1750
 
 Quick Snippets:
   Branch:   bug/1750-fix-cache-invalidation-on-publish
@@ -146,7 +146,7 @@ Slugify the subject (lowercase, spaces to hyphens, strip special chars, max 50 c
 Show proposed branch name, let user override, then:
 
 ```bash
-git checkout {{BASE_BRANCH}} && git pull origin {{BASE_BRANCH}} && git checkout -b "${BRANCH}"
+git checkout ${BASE_BRANCH} && git pull origin ${BASE_BRANCH} && git checkout -b "${BRANCH}"
 ```
 
 **Update ticket status** to "In progress" (status ID: 7):
@@ -156,12 +156,12 @@ Always fetch the current `lockVersion` before updating:
 
 ```bash
 # 1. Get current lockVersion
-LOCK=$(curl -s "{{OP_BASE_URL}}/api/v3/work_packages/${TICKET_ID}" \
+LOCK=$(curl -s "${OP_BASE_URL}/api/v3/work_packages/${TICKET_ID}" \
   -u "apikey:${OPENPROJECT_API_KEY}" | jq '.lockVersion')
 
 # 2. Update with lockVersion
 curl -s -X PATCH \
-  "{{OP_BASE_URL}}/api/v3/work_packages/${TICKET_ID}" \
+  "${OP_BASE_URL}/api/v3/work_packages/${TICKET_ID}" \
   -H "Content-Type: application/json" \
   -u "apikey:${OPENPROJECT_API_KEY}" \
   -d "{\"lockVersion\": ${LOCK}, \"_links\":{\"status\":{\"href\":\"/api/v3/statuses/7\"}}}"
@@ -186,6 +186,6 @@ If yes, invoke `/plan` based on the ticket description.
 
 ## Constants
 
-- **Base URL**: `{{OP_BASE_URL}}`
-- **Project**: `{{OP_PROJECT_SLUG}}`
-- **Work Package URL pattern**: `{{OP_BASE_URL}}/projects/{{OP_PROJECT_SLUG}}/work_packages/${ID}`
+- **Base URL**: `${OP_BASE_URL}`
+- **Project**: `${OP_PROJECT_SLUG}`
+- **Work Package URL pattern**: `${OP_BASE_URL}/projects/${OP_PROJECT_SLUG}/work_packages/${ID}`
