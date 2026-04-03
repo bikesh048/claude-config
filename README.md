@@ -1,61 +1,65 @@
 # TripcartHQ Claude Config
 
-Shared Claude Code configuration for all TripcartHQ projects. Provides standardized commands, skills, rules, agents, and permissions — all installed at the project level.
+Shared Claude Code configuration for the organization. Symlinks commands, rules, agents, and skills into any project.
 
 ## Quick Start
 
-### Install into a project
-
 ```bash
 git clone git@github.com:TripcartHQ/claude-config.git
+cd claude-config
 
-# Install (prompts to create settings.local.json on first run)
-./setup.sh ~/projects/tripcart-builder --profile=fullstack-ts
-
-# Install all profiles at once
+# Install into a project (symlinks commands + PR template)
 ./setup.sh ~/projects/tripcart-builder
 
-# Install multiple profiles
-./setup.sh ~/projects/tripcart-builder --profile=fullstack-ts --profile=laravel-php
+# First run prompts for settings.local.json (API keys, project config)
 ```
 
-Or create `settings.local.json` manually:
-```bash
-cp /path/to/claude-config/settings.local.json.example ~/projects/your-config/.claude/settings.local.json
-# Edit with your values
-```
-
-### Add a single item later
+## Usage
 
 ```bash
-./setup.sh ~/projects/tripcart-builder --add skill my-skill
-./setup.sh ~/projects/tripcart-builder --add rule my-rule.md
-./setup.sh ~/projects/tripcart-builder --add command my-cmd.md
-./setup.sh ~/projects/tripcart-builder --add agent my-agent.md
-```
+# Default setup — commands + templates
+./setup.sh ~/projects/your-project
 
-### Update an existing project
+# Replace existing files with symlinks
+./setup.sh ~/projects/your-project --force
 
-```bash
-./setup.sh ~/projects/tripcart-builder --update
+# Add extras
+./setup.sh ~/projects/your-project --add rule                    # all rules
+./setup.sh ~/projects/your-project --add rule security.md         # specific rule
+./setup.sh ~/projects/your-project --add agent code-reviewer.md
+./setup.sh ~/projects/your-project --add skill playwright-cli
+
+# Remove
+./setup.sh ~/projects/your-project --remove                      # remove everything
+./setup.sh ~/projects/your-project --remove command op.md         # specific file
+./setup.sh ~/projects/your-project --remove rule                  # all rules
 ```
 
 ## What Gets Installed
 
-Everything goes into the project's `.claude/` directory:
+**By default** (every project):
+- `commands/` — op, deliver, dispatch, pr, interview
+- `templates/` — PR template (to `.github/`)
+- `settings.json` — shared permissions (copied)
+- `settings.local.json` — project config + API keys (created on first run, gitignored)
 
-| Item | Description |
-|------|-------------|
-| `rules/*.md` | Shared coding standards (auto-installed) |
-| `rules/typescript/` | TypeScript-specific patterns (profile) |
-| `agents/` | Code reviewer, security auditor |
-| `commands/` | op, deliver, dispatch, pr, interview |
-| `settings.json` | Shared permissions (committed) |
-| `settings.local.json` | Project config + API keys (gitignored) |
+**Via --add** (optional per project):
+- `rules/` — coding standards (coding-style, security, testing, etc.)
+- `rules/typescript/` — TypeScript-specific patterns
+- `agents/` — code-reviewer, security-auditor
+- `skills/` — reusable skill references
+
+## How It Works
+
+- All shared files are **symlinked** — edits flow back to claude-config
+- Symlinked files are **auto-added to .gitignore** (per file, not per directory)
+- Project-specific files in the same dirs are **not affected**
+- Running setup again is **idempotent** — skips existing, cleans stale symlinks
+- `--force` replaces existing files and untracks them from git
 
 ## settings.local.json
 
-Created per project during setup. Contains project config and API keys — loaded automatically by Claude Code at session start, zero context cost.
+Created per project on first run. Loaded by Claude Code automatically at session start (zero context cost):
 
 ```json
 {
@@ -69,38 +73,37 @@ Created per project during setup. Contains project config and API keys — loade
 }
 ```
 
-Commands use `$OP_BASE_URL`, `$OPENPROJECT_API_KEY` etc. at runtime. Add project-specific credentials (dashboard login, etc.) to the `env` section too.
-
 ## Repo Structure
 
 ```
 claude-config/
-├── setup.sh                      # Setup script
-├── settings.local.json.example   # Settings template
-├── docs/
-│   └── commands.md               # Command usage reference
-├── profiles/
-│   ├── fullstack-ts.conf
-│   └── laravel-php.conf
-└── config/                      # -> .claude/ in target project
-    ├── settings.json
-    ├── agents/
-    ├── commands/
-    ├── rules/
-    │   ├── *.md              # Shared (auto-installed)
-    │   └── typescript/       # Profile-specific
-    └── templates/
+├── setup.sh
+├── settings.json                 # Shared permissions
+├── settings.local.json.example   # Template for project config
+├── docs/commands.md              # Command usage reference
+├── commands/                     # Installed by default
+│   ├── op.md
+│   ├── deliver.md
+│   ├── dispatch.md
+│   ├── pr.md
+│   └── interview.md
+├── templates/                    # Installed by default
+│   └── pull_request_template.md
+├── rules/                        # Available via --add
+│   ├── *.md
+│   └── typescript/
+└── agents/                       # Available via --add
+    ├── code-reviewer.md
+    └── security-auditor.md
 ```
 
-## How Symlinks Work
+## For New Team Members
 
-All shared files are symlinked from claude-config into the project's `.claude/` directory.
-Edits in any project flow back to claude-config automatically.
-
-Symlinked directories (`.claude/rules`, `.claude/commands`, `.claude/agents`) are
-automatically added to the project's `.gitignore` by `setup.sh`. Only project-specific
-files (like custom skills or local rules) should be committed to the project repo.
+1. Clone this repo
+2. Run `./setup.sh ~/projects/your-project`
+3. Fill in `settings.local.json` when prompted
+4. Done — commands are available
 
 ## Command Reference
 
-See [docs/commands.md](docs/commands.md) for usage of all commands.
+See [docs/commands.md](docs/commands.md)

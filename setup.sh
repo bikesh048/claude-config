@@ -20,54 +20,50 @@ header() { echo -e "\n${BOLD}$1${NC}"; }
 usage() {
   cat <<EOF
 Usage:
-  $(basename "$0") <project-path> [--profile=<name>...] [--force]
-  $(basename "$0") <project-path> --add <type> <name>
-  $(basename "$0") <project-path> --clean
-  $(basename "$0") --list-profiles
+  $(basename "$0") <project-path> [--force]
+  $(basename "$0") <project-path> --add <type> [name]
+  $(basename "$0") <project-path> --remove [type] [name]
+
+Setup (default):
+  Symlinks all commands and templates into the project's .claude/ directory.
+  Creates settings.local.json on first run (project config + API keys).
+
+Add extras:
+  --add rule [name]       Add one or all rules
+  --add agent [name]      Add one or all agents
+  --add skill [name]      Add one or all skills
+  --add command [name]    Add one or all commands
+
+Remove:
+  --remove                Remove all symlinks
+  --remove rule [name]    Remove one or all rules
+  --remove agent [name]   Remove one or all agents
+  --remove skill [name]   Remove one or all skills
+  --remove command [name] Remove one or all commands
 
 Options:
-  --profile=<name>      Project profile (repeatable). No --profile = install all.
-  --force               Replace existing files with symlinks (untrack from git too).
-  --clean               Remove all symlinks created by setup (reset to clean state).
-  --add <type> <name>   Add a single item. Type: skill, rule, command, agent.
-  --list-profiles       List available profiles
-
-Default behavior:
-  - If file doesn't exist → create symlink + add to .gitignore
-  - If file exists (not a symlink) → skip (use --force to replace)
-  - If symlink exists and correct → skip
-  - If symlink exists but stale → replace
+  --force                 Replace existing files with symlinks (untrack from git)
 
 Examples:
-  $(basename "$0") ~/projects/tripcart-builder                        # install all profiles
-  $(basename "$0") ~/projects/tripcart-builder --profile=fullstack-ts
-  $(basename "$0") ~/projects/tripcart-builder --force                # replace existing files
-  $(basename "$0") ~/projects/tripcart-builder --clean                # remove all symlinks
-  $(basename "$0") ~/projects/tripcart-builder --add command my-cmd.md
+  $(basename "$0") ~/projects/tripcart-builder
+  $(basename "$0") ~/projects/tripcart-builder --force
+  $(basename "$0") ~/projects/tripcart-builder --add rule security.md
+  $(basename "$0") ~/projects/tripcart-builder --add rule                # add all rules
+  $(basename "$0") ~/projects/tripcart-builder --add agent code-reviewer.md
+  $(basename "$0") ~/projects/tripcart-builder --remove command op.md
+  $(basename "$0") ~/projects/tripcart-builder --remove                  # remove everything
 EOF
   exit 1
-}
-
-# ---------- List profiles ----------
-list_profiles() {
-  header "Available profiles:"
-  for conf in "$SCRIPT_DIR/profiles/"*.conf; do
-    # shellcheck disable=SC1090
-    (
-      source "$conf"
-      printf "  ${BOLD}%-20s${NC} %s\n" "$PROFILE_NAME" "$PROFILE_DESC"
-      printf "    Commands: %s\n" "${COMMANDS[*]}"
-    )
-    echo ""
-  done
 }
 
 # ---------- Create settings.local.json ----------
 create_local_settings() {
   local project_path="$1"
-  local local_settings="$project_path/.claude/settings.local.json"
+  local target="$project_path/.claude"
+  mkdir -p "$target"
+  local local_settings="$target/settings.local.json"
 
-  # Ensure settings.local.json is gitignored
+  # Ensure gitignored
   local gitignore="$project_path/.gitignore"
   if ! grep -q 'settings.local.json' "$gitignore" 2>/dev/null; then
     echo ".claude/settings.local.json" >> "$gitignore"
@@ -80,7 +76,7 @@ create_local_settings() {
   fi
 
   header "Create settings.local.json"
-  echo "  This file stores project config and API keys (gitignored)."
+  echo "  Project config and API keys (gitignored)."
   echo ""
 
   read -rp "OpenProject base URL: " OP_BASE_URL
@@ -110,7 +106,7 @@ symlink_file() {
   local dest="$2"
   local force="${3:-false}"
 
-  # Already linked correctly — skip
+  # Already linked correctly
   if [ -L "$dest" ] && [ "$src" = "$(realpath "$dest" 2>/dev/null)" ]; then
     return 1
   fi
@@ -118,9 +114,12 @@ symlink_file() {
   # Existing non-symlink file
   if [ -e "$dest" ] && [ ! -L "$dest" ]; then
     if [ "$force" = true ]; then
-      # Untrack from git if tracked
-      local rel_to_repo="${dest#"$(git -C "$(dirname "$dest")" rev-parse --show-toplevel 2>/dev/null)/"}"
-      git -C "$(dirname "$dest")" rm --cached "$rel_to_repo" 2>/dev/null || true
+      local repo_root
+      repo_root="$(git -C "$(dirname "$dest")" rev-parse --show-toplevel 2>/dev/null || echo "")"
+      if [ -n "$repo_root" ]; then
+        local rel="${dest#"$repo_root/"}"
+        git -C "$repo_root" rm --cached "$rel" 2>/dev/null || true
+      fi
       rm -f "$dest"
     else
       warn "Exists (not symlink): $(basename "$dest") — use --force to replace"
@@ -128,14 +127,12 @@ symlink_file() {
     fi
   fi
 
-  # Remove stale symlink
   [ -L "$dest" ] && rm -f "$dest"
-
   ln -s "$src" "$dest"
   return 0
 }
 
-# ---------- Ensure symlink is in .gitignore ----------
+# ---------- Ensure file is in .gitignore ----------
 ensure_gitignored() {
   local project_path="$1"
   local file_path="$2"
@@ -147,316 +144,295 @@ ensure_gitignored() {
   fi
 }
 
-# ---------- Clean all symlinks ----------
-clean_symlinks() {
+# ---------- Install items of a type ----------
+install_type() {
   local project_path="$1"
+  local type="$2"
+  local name="${3:-}"
+  local force="${4:-false}"
   local target="$project_path/.claude"
 
-  header "Cleaning symlinks from $target"
+  local src_dir="$SCRIPT_DIR/$type"
 
-  local count=0
-  for managed_dir in rules agents commands skills; do
-    [ -d "$target/$managed_dir" ] || continue
-    while IFS= read -r -d '' link; do
-      rm "$link"
-      info "Removed: ${link#"$target/"}"
-      ((count++)) || true
-    done < <(/usr/bin/find "$target/$managed_dir" -type l -print0 2>/dev/null)
-  done
-
-  # Clean .github template symlinks
-  if [ -d "$project_path/.github" ]; then
-    while IFS= read -r -d '' link; do
-      rm "$link"
-      info "Removed: ${link#"$project_path/"}"
-      ((count++)) || true
-    done < <(/usr/bin/find "$project_path/.github" -type l -print0 2>/dev/null)
+  # Skills are directories, everything else is files
+  if [ "$type" = "skills" ]; then
+    if [ -n "$name" ]; then
+      # Single skill
+      local skill_dir="$src_dir/$name"
+      [ -d "$skill_dir" ] || { error "Skill not found: $name"; return 1; }
+      mkdir -p "$target/skills/$name"
+      while IFS= read -r -d '' file; do
+        local rel="${file#"$skill_dir"/}"
+        mkdir -p "$target/skills/$name/$(dirname "$rel")"
+        if symlink_file "$file" "$target/skills/$name/$rel" "$force"; then
+          ensure_gitignored "$project_path" "$target/skills/$name/$rel"
+        fi
+      done < <(/usr/bin/find "$skill_dir" -type f -print0)
+      log "Installed skill: $name"
+    else
+      # All skills
+      for skill_dir in "$src_dir"/*/; do
+        [ -d "$skill_dir" ] || continue
+        local sname
+        sname="$(basename "$skill_dir")"
+        install_type "$project_path" "skills" "$sname" "$force"
+      done
+    fi
+    return
   fi
 
-  # Remove settings.json if it exists
-  [ -f "$target/settings.json" ] && rm "$target/settings.json" && ((count++)) || true
+  # Map type to target subdir
+  local target_subdir="$type"
 
-  echo ""
-  log "Removed $count file(s). Run setup.sh again to reinstall."
+  if [ -n "$name" ]; then
+    # Single file
+    local src="$src_dir/$name"
+    [ -f "$src" ] || { error "$type not found: $name"; return 1; }
+    mkdir -p "$target/$target_subdir"
+    if symlink_file "$src" "$target/$target_subdir/$name" "$force"; then
+      ensure_gitignored "$project_path" "$target/$target_subdir/$name"
+      log "Installed $type: $name"
+    fi
+  else
+    # All files (including subdirs for rules)
+    mkdir -p "$target/$target_subdir"
+    for src in "$src_dir"/*.md; do
+      [ -f "$src" ] || continue
+      local fname
+      fname="$(basename "$src")"
+      if symlink_file "$src" "$target/$target_subdir/$fname" "$force"; then
+        ensure_gitignored "$project_path" "$target/$target_subdir/$fname"
+        log "Installed $type: $fname"
+      fi
+    done
+    # Subdirs (e.g. rules/typescript/)
+    for subdir in "$src_dir"/*/; do
+      [ -d "$subdir" ] || continue
+      local dname
+      dname="$(basename "$subdir")"
+      mkdir -p "$target/$target_subdir/$dname"
+      for src in "$subdir"*.md; do
+        [ -f "$src" ] || continue
+        local fname
+        fname="$(basename "$src")"
+        if symlink_file "$src" "$target/$target_subdir/$dname/$fname" "$force"; then
+          ensure_gitignored "$project_path" "$target/$target_subdir/$dname/$fname"
+          log "Installed $type: $dname/$fname"
+        fi
+      done
+    done
+  fi
 }
 
-# ---------- Project install ----------
-install_project() {
+# ---------- Remove items ----------
+remove_items() {
   local project_path="$1"
-  local profile_name="$2"
-  local force="${3:-false}"
-
-  if [ ! -d "$project_path" ]; then
-    error "Project path not found: $project_path"
-    exit 1
-  fi
-
-  # Load profile
-  local profile_file="$SCRIPT_DIR/profiles/${profile_name}.conf"
-  if [ ! -f "$profile_file" ]; then
-    error "Profile not found: $profile_name"
-    echo "  Available profiles:"
-    for f in "$SCRIPT_DIR/profiles/"*.conf; do
-      echo "    - $(basename "${f%.conf}")"
-    done
-    exit 1
-  fi
-
-  # shellcheck disable=SC1090
-  source "$profile_file"
-
-  header "Profile: $PROFILE_NAME"
-  echo "  $PROFILE_DESC"
-
-  # Create settings.local.json if needed
-  create_local_settings "$project_path"
-
+  local type="${2:-}"
+  local name="${3:-}"
   local target="$project_path/.claude"
-  mkdir -p "$target"
 
-  # --- Clean stale symlinks ---
+  if [ -z "$type" ]; then
+    # Remove everything
+    header "Removing all symlinks from $target"
+    local count=0
+    for dir in rules agents commands skills; do
+      [ -d "$target/$dir" ] || continue
+      while IFS= read -r -d '' link; do
+        rm "$link"
+        info "Removed: ${link#"$target/"}"
+        ((count++)) || true
+      done < <(/usr/bin/find "$target/$dir" -type l -print0 2>/dev/null)
+    done
+    # .github templates
+    if [ -d "$project_path/.github" ]; then
+      while IFS= read -r -d '' link; do
+        rm "$link"
+        info "Removed: ${link#"$project_path/"}"
+        ((count++)) || true
+      done < <(/usr/bin/find "$project_path/.github" -type l -print0 2>/dev/null)
+    fi
+    [ -f "$target/settings.json" ] && rm "$target/settings.json" && ((count++)) || true
+    log "Removed $count file(s). Run setup.sh again to reinstall."
+    return
+  fi
+
+  local target_subdir="$type"
+
+  if [ -n "$name" ]; then
+    # Remove specific item
+    if [ "$type" = "skills" ]; then
+      local skill_dir="$target/skills/$name"
+      if [ -d "$skill_dir" ]; then
+        rm -rf "$skill_dir"
+        log "Removed skill: $name"
+      else
+        warn "Skill not found: $name"
+      fi
+    else
+      local dest="$target/$target_subdir/$name"
+      if [ -L "$dest" ] || [ -f "$dest" ]; then
+        rm -f "$dest"
+        log "Removed $type: $name"
+      else
+        warn "$type not found: $name"
+      fi
+    fi
+  else
+    # Remove all of type
+    local dir="$target/$target_subdir"
+    if [ -d "$dir" ]; then
+      local count=0
+      while IFS= read -r -d '' link; do
+        rm "$link"
+        ((count++)) || true
+      done < <(/usr/bin/find "$dir" -type l -print0 2>/dev/null)
+      log "Removed $count $type symlink(s)"
+    else
+      warn "No $type installed"
+    fi
+  fi
+}
+
+# ---------- Clean stale symlinks ----------
+clean_stale() {
+  local target="$1"
   local stale_count=0
-  for managed_dir in rules agents commands skills; do
-    [ -d "$target/$managed_dir" ] || continue
+  for dir in rules agents commands skills; do
+    [ -d "$target/$dir" ] || continue
     while IFS= read -r -d '' link; do
       if [ ! -e "$link" ]; then
         rm "$link"
-        warn "Removed stale symlink: ${link#"$target/"}"
+        warn "Removed stale: ${link#"$target/"}"
         ((stale_count++)) || true
       fi
-    done < <(/usr/bin/find "$target/$managed_dir" -type l -print0 2>/dev/null)
+    done < <(/usr/bin/find "$target/$dir" -type l -print0 2>/dev/null)
   done
   if [ "$stale_count" -gt 0 ]; then
     log "Cleaned $stale_count stale symlink(s)"
   fi
+}
+
+# ---------- Default install ----------
+install_default() {
+  local project_path="$1"
+  local force="${2:-false}"
+  local target="$project_path/.claude"
+
+  create_local_settings "$project_path"
+  mkdir -p "$target"
+  clean_stale "$target"
 
   header "Installing to $target"
 
-  # --- settings.json (copied) ---
+  # settings.json (copied)
   local settings_dest="$target/settings.json"
   [ -e "$settings_dest" ] || [ -L "$settings_dest" ] && rm -f "$settings_dest"
-  cp "$SCRIPT_DIR/config/settings.json" "$settings_dest"
+  cp "$SCRIPT_DIR/settings.json" "$settings_dest"
   ensure_gitignored "$project_path" "$settings_dest"
   log "Installed settings.json (copied)"
 
-  # --- Rules ---
-  mkdir -p "$target/rules"
-  for rule_file in "$SCRIPT_DIR/config/rules/"*.md; do
-    [ -f "$rule_file" ] || continue
+  # Commands
+  install_type "$project_path" "commands" "" "$force"
+
+  # Templates
+  mkdir -p "$project_path/.github"
+  for tmpl in "$SCRIPT_DIR/templates/"*.md; do
+    [ -f "$tmpl" ] || continue
     local fname
-    fname="$(basename "$rule_file")"
-    if symlink_file "$rule_file" "$target/rules/$fname" "$force"; then
-      ensure_gitignored "$project_path" "$target/rules/$fname"
-      log "Installed rule: $fname"
+    fname="$(basename "$tmpl")"
+    if symlink_file "$tmpl" "$project_path/.github/$fname" "$force"; then
+      ensure_gitignored "$project_path" "$project_path/.github/$fname"
+      log "Installed template: $fname"
     fi
   done
 
-  if [ ${#SHARED_RULES_DIRS[@]} -gt 0 ]; then
-    for dir in "${SHARED_RULES_DIRS[@]}"; do
-      local src_dir="$SCRIPT_DIR/config/rules/$dir"
-      if [ -d "$src_dir" ]; then
-        mkdir -p "$target/rules/$dir"
-        for rule_file in "$src_dir"/*.md; do
-          [ -f "$rule_file" ] || continue
-          local fname
-          fname="$(basename "$rule_file")"
-          if symlink_file "$rule_file" "$target/rules/$dir/$fname" "$force"; then
-            ensure_gitignored "$project_path" "$target/rules/$dir/$fname"
-            log "Installed rule: $dir/$fname"
-          fi
-        done
-      fi
-    done
-  fi
-
-  # --- Agents ---
-  if [ ${#AGENTS[@]} -gt 0 ]; then
-    mkdir -p "$target/agents"
-    for agent in "${AGENTS[@]}"; do
-      local src="$SCRIPT_DIR/config/agents/$agent"
-      if [ -f "$src" ]; then
-        if symlink_file "$src" "$target/agents/$agent" "$force"; then
-          ensure_gitignored "$project_path" "$target/agents/$agent"
-          log "Installed agent: $agent"
-        fi
-      fi
-    done
-  fi
-
-  # --- Commands ---
-  if [ ${#COMMANDS[@]} -gt 0 ]; then
-    mkdir -p "$target/commands"
-    for cmd in "${COMMANDS[@]}"; do
-      local src="$SCRIPT_DIR/config/commands/$cmd"
-      if [ -f "$src" ]; then
-        if symlink_file "$src" "$target/commands/$cmd" "$force"; then
-          ensure_gitignored "$project_path" "$target/commands/$cmd"
-          log "Installed command: $cmd"
-        fi
-      fi
-    done
-  fi
-
-  # --- Skills ---
-  if [ ${#SKILLS[@]} -gt 0 ]; then
-    for skill in "${SKILLS[@]}"; do
-      local src_dir="$SCRIPT_DIR/config/skills/$skill"
-      if [ -d "$src_dir" ]; then
-        mkdir -p "$target/skills/$skill"
-        while IFS= read -r -d '' file; do
-          local rel="${file#"$src_dir"/}"
-          mkdir -p "$target/skills/$skill/$(dirname "$rel")"
-          if symlink_file "$file" "$target/skills/$skill/$rel" "$force"; then
-            ensure_gitignored "$project_path" "$target/skills/$skill/$rel"
-          fi
-        done < <(/usr/bin/find "$src_dir" -type f -print0)
-        log "Installed skill: $skill"
-      fi
-    done
-  fi
-
-  # --- Templates ---
-  if [ ${#TEMPLATES[@]} -gt 0 ]; then
-    mkdir -p "$project_path/.github"
-    for tmpl in "${TEMPLATES[@]}"; do
-      local src="$SCRIPT_DIR/config/templates/$tmpl"
-      if [ -f "$src" ]; then
-        if symlink_file "$src" "$project_path/.github/$tmpl" "$force"; then
-          ensure_gitignored "$project_path" "$project_path/.github/$tmpl"
-          log "Installed template: $tmpl"
-        fi
-      fi
-    done
-  fi
-
   echo ""
-  log "Profile installed: $PROFILE_NAME"
-  echo "  All files symlinked to claude-config repo."
-  echo "  Edits in .claude/ flow back to claude-config automatically."
-}
-
-# ---------- Add single item ----------
-add_item() {
-  local project_path="$1"
-  local item_type="$2"
-  local item_name="$3"
-
-  if [ ! -d "$project_path" ]; then
-    error "Project path not found: $project_path"
-    exit 1
-  fi
-
-  local target="$project_path/.claude"
-
-  case "$item_type" in
-    skill)
-      local src_dir="$SCRIPT_DIR/config/skills/$item_name"
-      if [ ! -d "$src_dir" ]; then
-        error "Skill not found: $item_name"
-        echo "  Available:"
-        for d in "$SCRIPT_DIR/config/skills/"*/; do echo "    - $(basename "$d")"; done
-        exit 1
-      fi
-      mkdir -p "$target/skills/$item_name"
-      while IFS= read -r -d '' file; do
-        local rel="${file#"$src_dir"/}"
-        mkdir -p "$target/skills/$item_name/$(dirname "$rel")"
-        symlink_file "$file" "$target/skills/$item_name/$rel"
-        ensure_gitignored "$project_path" "$target/skills/$item_name/$rel"
-      done < <(/usr/bin/find "$src_dir" -type f -print0)
-      log "Added skill: $item_name"
-      ;;
-    rule)
-      local src="$SCRIPT_DIR/config/rules/$item_name"
-      [ -f "$src" ] || { error "Rule not found: $item_name"; exit 1; }
-      mkdir -p "$target/rules"
-      symlink_file "$src" "$target/rules/$item_name"
-      ensure_gitignored "$project_path" "$target/rules/$item_name"
-      log "Added rule: $item_name"
-      ;;
-    command)
-      local src="$SCRIPT_DIR/config/commands/$item_name"
-      [ -f "$src" ] || { error "Command not found: $item_name"; exit 1; }
-      mkdir -p "$target/commands"
-      symlink_file "$src" "$target/commands/$item_name"
-      ensure_gitignored "$project_path" "$target/commands/$item_name"
-      log "Added command: $item_name"
-      ;;
-    agent)
-      local src="$SCRIPT_DIR/config/agents/$item_name"
-      [ -f "$src" ] || { error "Agent not found: $item_name"; exit 1; }
-      mkdir -p "$target/agents"
-      symlink_file "$src" "$target/agents/$item_name"
-      ensure_gitignored "$project_path" "$target/agents/$item_name"
-      log "Added agent: $item_name"
-      ;;
-    *)
-      error "Unknown type: $item_type (use: skill, rule, command, agent)"
-      exit 1
-      ;;
-  esac
+  log "Setup complete!"
+  echo "  Commands and templates symlinked."
+  echo "  Add extras: --add rule, --add agent, --add skill"
 }
 
 # ---------- Parse args ----------
 PROJECT_PATH=""
-PROFILES=()
 FORCE=false
-CLEAN=false
+REMOVE=false
 ADD_TYPE=""
 ADD_NAME=""
+REMOVE_TYPE=""
+REMOVE_NAME=""
 
 if [ $# -eq 0 ]; then
   usage
 fi
 
-for arg in "$@"; do
+args=("$@")
+i=0
+while [ $i -lt ${#args[@]} ]; do
+  arg="${args[$i]}"
   case "$arg" in
-    --profile=*)        PROFILES+=("${arg#--profile=}") ;;
-    --force)            FORCE=true ;;
-    --clean)            CLEAN=true ;;
-    --add)              ADD_TYPE="__pending__" ;;
-    --list-profiles)    list_profiles; exit 0 ;;
-    --help|-h)          usage ;;
-    -*)                 error "Unknown flag: $arg"; usage ;;
+    --force)  FORCE=true ;;
+    --remove)
+      REMOVE=true
+      # Check if next arg is a type (not a flag or path)
+      if [ $((i+1)) -lt ${#args[@]} ] && [[ "${args[$((i+1))]}" =~ ^(rules|agents|commands|skills|rule|agent|command|skill)$ ]]; then
+        ((i++))
+        REMOVE_TYPE="${args[$i]}"
+        # Normalize singular to plural
+        [[ "$REMOVE_TYPE" == "rule" ]] && REMOVE_TYPE="rules"
+        [[ "$REMOVE_TYPE" == "agent" ]] && REMOVE_TYPE="agents"
+        [[ "$REMOVE_TYPE" == "command" ]] && REMOVE_TYPE="commands"
+        [[ "$REMOVE_TYPE" == "skill" ]] && REMOVE_TYPE="skills"
+        # Check for optional name
+        if [ $((i+1)) -lt ${#args[@]} ] && [[ ! "${args[$((i+1))]}" == --* ]]; then
+          ((i++))
+          REMOVE_NAME="${args[$i]}"
+        fi
+      fi
+      ;;
+    --add)
+      if [ $((i+1)) -lt ${#args[@]} ]; then
+        ((i++))
+        ADD_TYPE="${args[$i]}"
+        # Normalize singular to plural
+        [[ "$ADD_TYPE" == "rule" ]] && ADD_TYPE="rules"
+        [[ "$ADD_TYPE" == "agent" ]] && ADD_TYPE="agents"
+        [[ "$ADD_TYPE" == "command" ]] && ADD_TYPE="commands"
+        [[ "$ADD_TYPE" == "skill" ]] && ADD_TYPE="skills"
+        # Check for optional name
+        if [ $((i+1)) -lt ${#args[@]} ] && [[ ! "${args[$((i+1))]}" == --* ]]; then
+          ((i++))
+          ADD_NAME="${args[$i]}"
+        fi
+      else
+        error "--add requires a type"; usage
+      fi
+      ;;
+    --help|-h) usage ;;
+    -*)        error "Unknown flag: $arg"; usage ;;
     *)
-      if [ "$ADD_TYPE" = "__pending__" ]; then
-        ADD_TYPE="$arg"
-      elif [ -n "$ADD_TYPE" ] && [ "$ADD_TYPE" != "__pending__" ] && [ -z "$ADD_NAME" ]; then
-        ADD_NAME="$arg"
-      elif [ -z "$PROJECT_PATH" ]; then
+      if [ -z "$PROJECT_PATH" ]; then
         PROJECT_PATH="$arg"
       else
         error "Unexpected argument: $arg"; usage
       fi
       ;;
   esac
+  ((i++))
 done
 
 # ---------- Execute ----------
 
 [ -z "$PROJECT_PATH" ] && { error "Project path required"; usage; }
+[ ! -d "$PROJECT_PATH" ] && { error "Project path not found: $PROJECT_PATH"; exit 1; }
 
-# Handle --clean
-if [ "$CLEAN" = true ]; then
-  clean_symlinks "$PROJECT_PATH"
+if [ "$REMOVE" = true ]; then
+  remove_items "$PROJECT_PATH" "$REMOVE_TYPE" "$REMOVE_NAME"
   exit 0
 fi
 
-# Handle --add
-if [ -n "$ADD_TYPE" ] && [ "$ADD_TYPE" != "__pending__" ]; then
-  [ -z "$ADD_NAME" ] && { error "Name required: --add <type> <name>"; usage; }
-  add_item "$PROJECT_PATH" "$ADD_TYPE" "$ADD_NAME"
+if [ -n "$ADD_TYPE" ]; then
+  install_type "$PROJECT_PATH" "$ADD_TYPE" "$ADD_NAME" "$FORCE"
   exit 0
 fi
 
-# No --profile → install all
-if [ ${#PROFILES[@]} -eq 0 ]; then
-  for conf in "$SCRIPT_DIR/profiles/"*.conf; do
-    PROFILES+=("$(basename "${conf%.conf}")")
-  done
-  info "No --profile specified — installing all: ${PROFILES[*]}"
-fi
-
-for profile in "${PROFILES[@]}"; do
-  install_project "$PROJECT_PATH" "$profile" "$FORCE"
-done
+install_default "$PROJECT_PATH" "$FORCE"
