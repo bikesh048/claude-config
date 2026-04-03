@@ -73,11 +73,16 @@ create_local_settings() {
   fi
 
   if [ -f "$local_settings" ]; then
-    warn "settings.local.json already exists — skipping"
-    return
+    # Check if env section exists
+    if grep -q '"env"' "$local_settings" 2>/dev/null; then
+      warn "settings.local.json already exists — skipping"
+      return
+    else
+      warn "settings.local.json exists but missing env section"
+    fi
   fi
 
-  header "Create settings.local.json"
+  header "Create settings.local.json env"
   echo "  Project config and API keys (gitignored)."
   echo ""
 
@@ -88,7 +93,22 @@ create_local_settings() {
   BASE_BRANCH="${BASE_BRANCH:-develop}"
   read -rp "OpenProject API key: " OPENPROJECT_API_KEY
 
-  cat > "$local_settings" << EOF
+  if [ -f "$local_settings" ]; then
+    # Merge env into existing file using a temp file
+    local tmp
+    tmp=$(mktemp)
+    # Read existing JSON, add env key
+    if command -v jq > /dev/null 2>&1; then
+      jq --arg op_url "$OP_BASE_URL" \
+         --arg op_slug "$OP_PROJECT_SLUG" \
+         --arg gh_repo "$GITHUB_ORG_REPO" \
+         --arg branch "$BASE_BRANCH" \
+         --arg api_key "$OPENPROJECT_API_KEY" \
+         '. + {env: {OP_BASE_URL: $op_url, OP_PROJECT_SLUG: $op_slug, GITHUB_ORG_REPO: $gh_repo, BASE_BRANCH: $branch, OPENPROJECT_API_KEY: $api_key}}' \
+         "$local_settings" > "$tmp" && mv "$tmp" "$local_settings"
+    else
+      # No jq — overwrite with full file
+      cat > "$local_settings" << EOF
 {
   "env": {
     "OP_BASE_URL": "${OP_BASE_URL}",
@@ -99,7 +119,22 @@ create_local_settings() {
   }
 }
 EOF
-  log "Created settings.local.json"
+    fi
+    log "Added env to existing settings.local.json"
+  else
+    cat > "$local_settings" << EOF
+{
+  "env": {
+    "OP_BASE_URL": "${OP_BASE_URL}",
+    "OP_PROJECT_SLUG": "${OP_PROJECT_SLUG}",
+    "GITHUB_ORG_REPO": "${GITHUB_ORG_REPO}",
+    "BASE_BRANCH": "${BASE_BRANCH}",
+    "OPENPROJECT_API_KEY": "${OPENPROJECT_API_KEY}"
+  }
+}
+EOF
+    log "Created settings.local.json"
+  fi
 }
 
 # ---------- Symlink a file ----------
