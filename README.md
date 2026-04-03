@@ -21,7 +21,7 @@ git clone git@github.com:TripcartHQ/claude-config.git
 
 Or create `settings.local.json` manually:
 ```bash
-cp /path/to/claude-config/settings.local.example.json ~/projects/your-project/.claude/settings.local.json
+cp /path/to/claude-config/settings.local.json.example ~/projects/your-project/.claude/settings.local.json
 # Edit with your values
 ```
 

@@ -20,7 +20,7 @@ header() { echo -e "\n${BOLD}$1${NC}"; }
 usage() {
   cat <<EOF
 Usage:
-  $(basename "$0") <project-path> [--profile=<name>...] [--config=<file>] [--update] [--copy]
+  $(basename "$0") <project-path> [--profile=<name>...] [--update] [--copy]
   $(basename "$0") <project-path> --add <type> <name> [--copy]
   $(basename "$0") --list-profiles
 
