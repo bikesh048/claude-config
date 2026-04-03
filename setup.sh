@@ -715,7 +715,17 @@ while [ $i -lt ${#args[@]} ]; do
   arg="${args[$i]}"
   case "$arg" in
     --force)  FORCE=true ;;
-    --config) configure_defaults; exit 0 ;;
+    --config)
+      configure_defaults
+      echo ""
+      read -rp "Run setup now? Enter project path (or Enter to skip): " config_path
+      if [ -n "$config_path" ]; then
+        config_path="${config_path/#\~/$HOME}"
+        PROJECT_PATH="$config_path"
+      else
+        exit 0
+      fi
+      ;;
     --list)
       list_type=""
       if [ $((i+1)) -lt ${#args[@]} ] && [[ "${args[$((i+1))]}" =~ ^(rules|agents|commands|skills|templates|rule|agent|command|skill|template)$ ]]; then
