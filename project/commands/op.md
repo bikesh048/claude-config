@@ -170,7 +170,7 @@ Derive branch name from ticket type and ID:
 | Tech Debt | `tech-debt/` |
 | User story | `story/` |
 
-Slugify subject: `${PREFIX}${TICKET_ID}-${SLUG}` (lowercase, spaces to hyphens, keep all words, max 50 chars).
+Slugify subject: `${PREFIX}${TICKET_ID}-${SLUG}` — lowercase, replace spaces `/` `.` `:` with hyphens, strip `://` and `https` and `http` prefixes, strip remaining non-alphanumeric except hyphens, collapse consecutive hyphens, trim trailing hyphens, no length limit.
 
 **Write the branch name to the ticket's Quick Snippets field** (`customField31`) so it becomes the source of truth:
 
