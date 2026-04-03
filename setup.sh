@@ -357,15 +357,16 @@ install_default() {
       else
         rm -f "$settings_dest"
         cp "$SCRIPT_DIR/settings.json" "$settings_dest"
+        ensure_gitignored "$project_path" "$settings_dest"
         log "Installed settings.json (copied)"
       fi
     fi
   else
     [ -e "$settings_dest" ] || [ -L "$settings_dest" ] && rm -f "$settings_dest"
     cp "$SCRIPT_DIR/settings.json" "$settings_dest"
+    ensure_gitignored "$project_path" "$settings_dest"
     log "Installed settings.json (copied)"
   fi
-  ensure_gitignored "$project_path" "$settings_dest"
 
   # Install each type from defaults.conf
   for type_var in COMMANDS RULES AGENTS SKILLS; do
