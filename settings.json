@@ -26,5 +26,18 @@
       "Read(**/.env)",
       "Read(**/.env.*)"
     ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "file=\"$CLAUDE_FILE\"; ext=\"${file##*.}\"; case \"$ext\" in ts|tsx|js|jsx) npx prettier --write \"$file\" 2>/dev/null ;; esac; true"
+          }
+        ]
+      }
+    ]
   }
 }

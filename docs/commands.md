@@ -6,8 +6,10 @@
 /op         →  OpenProject ticket operations (read, create, update)
 /deliver    →  Single task, end-to-end (the main workflow)
 /dispatch   →  Multiple tasks in parallel (uses /deliver per task)
-/pr  →  PR creation with code review
+/pr         →  PR creation with code review
 /interview  →  Deep discovery interview before implementation
+/qa         →  Verify implementation (tests, AC, edge cases)
+/retro      →  Session retrospective (capture learnings)
 ```
 
 ## /op
@@ -88,6 +90,27 @@ Structured discovery interview to surface gaps and tradeoffs before implementati
 
 Asks 2-4 questions per round across multiple dimensions (scope, technical, UX, edge cases). Produces a spec file.
 
+## /qa
+
+Verify the current branch's changes through automated and manual checks.
+
+```
+/qa                    # Full QA on current branch
+/qa <feature>          # Focus on specific feature
+```
+
+**Flow:** gather scope → type-check + tests + lint → acceptance criteria → edge case review → browser verify (if UI) → report
+
+## /retro
+
+Capture learnings from the current session.
+
+```
+/retro                 # Session retrospective
+```
+
+Reviews what was done, captures patterns, suggests rule/command updates. Saves learnings to `.claude/memories/`.
+
 ## Command Relationships
 
 ```
@@ -95,6 +118,9 @@ Asks 2-4 questions per round across multiple dimensions (scope, technical, UX, e
   └── /deliver (per task)
         ├── /op (read/create ticket)
         ├── /interview (plan + discovery)
+        ├── /qa (verify before PR)
         ├── /pr (push + PR)
         └── /op update (post progress)
+
+/retro                   (standalone — end of session)
 ```
