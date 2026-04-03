@@ -455,6 +455,81 @@ install_default() {
     done
   fi
 
+  # --- Sync: remove symlinks not in defaults ---
+  local sync_count=0
+  for managed_dir in rules agents commands skills templates; do
+    [ -d "$target/$managed_dir" ] || continue
+    while IFS= read -r -d '' link; do
+      [ -L "$link" ] || continue
+      local link_target
+      link_target="$(readlink "$link")"
+      # Only remove symlinks pointing to our claude-config repo
+      [[ "$link_target" == "$SCRIPT_DIR/"* ]] || continue
+      local fname
+      fname="$(basename "$link")"
+      # Check if this file is in the current defaults
+      local should_exist=false
+      case "$managed_dir" in
+        commands)
+          eval "local items=(\"\${COMMANDS[@]+\"\${COMMANDS[@]}\"}\")"
+          [[ "${items[0]:-}" == "all" ]] && should_exist=true
+          for item in "${items[@]}"; do [ "$item" = "$fname" ] && should_exist=true; done
+          ;;
+        rules)
+          eval "local items=(\"\${RULES[@]+\"\${RULES[@]}\"}\")"
+          [[ "${items[0]:-}" == "all" ]] && should_exist=true
+          local rel="${link#"$target/rules/"}"
+          for item in "${items[@]}"; do [ "$item" = "$rel" ] || [ "$item" = "$fname" ] && should_exist=true; done
+          ;;
+        agents)
+          eval "local items=(\"\${AGENTS[@]+\"\${AGENTS[@]}\"}\")"
+          [[ "${items[0]:-}" == "all" ]] && should_exist=true
+          for item in "${items[@]}"; do [ "$item" = "$fname" ] && should_exist=true; done
+          ;;
+        skills)
+          eval "local items=(\"\${SKILLS[@]+\"\${SKILLS[@]}\"}\")"
+          [[ "${items[0]:-}" == "all" ]] && should_exist=true
+          local skill_name="${link#"$target/skills/"}"
+          skill_name="${skill_name%%/*}"
+          for item in "${items[@]}"; do [ "$item" = "$skill_name" ] && should_exist=true; done
+          ;;
+        templates)
+          eval "local items=(\"\${TEMPLATES[@]+\"\${TEMPLATES[@]}\"}\")"
+          [[ "${items[0]:-}" == "all" ]] && should_exist=true
+          for item in "${items[@]}"; do [ "$item" = "$fname" ] && should_exist=true; done
+          ;;
+      esac
+      if [ "$should_exist" = false ]; then
+        rm "$link"
+        warn "Removed (not in defaults): $managed_dir/$fname"
+        ((sync_count++)) || true
+      fi
+    done < <(command find "$target/$managed_dir" -type l -print0 2>/dev/null)
+  done
+  # Also sync .github templates
+  if [ -d "$project_path/.github" ]; then
+    while IFS= read -r -d '' link; do
+      [ -L "$link" ] || continue
+      local link_target
+      link_target="$(readlink "$link")"
+      [[ "$link_target" == "$SCRIPT_DIR/"* ]] || continue
+      local fname
+      fname="$(basename "$link")"
+      local should_exist=false
+      eval "local items=(\"\${TEMPLATES[@]+\"\${TEMPLATES[@]}\"}\")"
+      [[ "${items[0]:-}" == "all" ]] && should_exist=true
+      for item in "${items[@]}"; do [ "$item" = "$fname" ] && should_exist=true; done
+      if [ "$should_exist" = false ]; then
+        rm "$link"
+        warn "Removed (not in defaults): .github/$fname"
+        ((sync_count++)) || true
+      fi
+    done < <(command find "$project_path/.github" -type l -print0 2>/dev/null)
+  fi
+  if [ "$sync_count" -gt 0 ]; then
+    log "Synced: removed $sync_count item(s) not in defaults.conf"
+  fi
+
   echo ""
   log "Setup complete!"
   echo "  Use --list to see available items."
