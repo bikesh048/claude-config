@@ -7,7 +7,7 @@ paths:
 ---
 # TypeScript/JavaScript Coding Style
 
-> This file extends [common/coding-style.md](../common/coding-style.md) with TypeScript/JavaScript specific content.
+> This file extends [common/coding-style.md](../coding-style.md) with TypeScript/JavaScript specific content.
 
 ## Types and Interfaces
 
@@ -196,4 +196,10 @@ const validated: UserInput = userSchema.parse(input)
 
 - No `console.log` statements in production code
 - Use proper logging libraries instead
-- See hooks for automatic detection
+
+## Recommended Hooks
+
+Configure in `settings.json`:
+- **Prettier**: Auto-format JS/TS files after edit
+- **TypeScript check**: Run `tsc` after editing `.ts`/`.tsx` files
+- **console.log audit**: Check modified files for `console.log` before session ends

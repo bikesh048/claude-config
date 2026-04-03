@@ -225,9 +225,7 @@ install_project() {
 
   # Show what will be installed and allow exclusions
   header "Review items to install"
-  prompt_exclusions RULES "Rules"
   prompt_exclusions COMMANDS "Commands"
-  prompt_exclusions SKILLS "Skills"
 
   local target="$project_path/.claude"
   mkdir -p "$target"
@@ -260,7 +258,20 @@ install_project() {
     log "Installed settings.json (copied)"
   fi
 
-  # --- Install shared rule directories (common, typescript, etc.) ---
+  # --- Install rules ---
+  mkdir -p "$target/rules"
+
+  # Top-level rules (shared across all profiles)
+  for rule_file in "$SCRIPT_DIR/project/rules/"*.md; do
+    [ -f "$rule_file" ] || continue
+    local fname
+    fname="$(basename "$rule_file")"
+    if install_file "$rule_file" "$target/rules/$fname" "$update_mode" "$link_mode"; then
+      log "Installed rule: $fname"
+    fi
+  done
+
+  # Profile-specific rule subdirectories (e.g. typescript/)
   if [ ${#SHARED_RULES_DIRS[@]} -gt 0 ]; then
     for dir in "${SHARED_RULES_DIRS[@]}"; do
       local src_dir="$SCRIPT_DIR/project/rules/$dir"
@@ -275,22 +286,7 @@ install_project() {
           fi
         done
       else
-        warn "Shared rules dir not found: $dir (skipped)"
-      fi
-    done
-  fi
-
-  # --- Install project-specific rules ---
-  if [ ${#RULES[@]} -gt 0 ]; then
-    mkdir -p "$target/rules"
-    for rule in "${RULES[@]}"; do
-      local src="$SCRIPT_DIR/project/rules/$rule"
-      if [ -f "$src" ]; then
-        if install_file "$src" "$target/rules/$rule" "$update_mode" "$link_mode"; then
-          log "Installed rule: $rule"
-        fi
-      else
-        warn "Rule not found: $rule (skipped)"
+        warn "Rules dir not found: $dir (skipped)"
       fi
     done
   fi

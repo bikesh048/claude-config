@@ -46,12 +46,10 @@ Everything goes into the project's `.claude/` directory:
 
 | Item | Description |
 |------|-------------|
-| `rules/common/` | Language-agnostic coding standards |
-| `rules/typescript/` | TypeScript-specific patterns |
-| `rules/*.md` | Project rules (nestjs, prisma, etc.) |
+| `rules/*.md` | Shared coding standards (auto-installed) |
+| `rules/typescript/` | TypeScript-specific patterns (profile) |
 | `agents/` | Code reviewer, security auditor |
-| `commands/` | op, deliver, dispatch, pr |
-| `skills/` | interview, playwright-cli |
+| `commands/` | op, deliver, dispatch, pr, interview |
 | `settings.json` | Shared permissions (committed) |
 | `settings.local.json` | Project config + API keys (gitignored) |
 
@@ -89,10 +87,8 @@ claude-config/
     ├── agents/
     ├── commands/
     ├── rules/
-    │   ├── common/
-    │   ├── typescript/
-    │   └── *.md
-    ├── skills/
+    │   ├── *.md              # Shared (auto-installed)
+    │   └── typescript/       # Profile-specific
     └── templates/
 ```
 
