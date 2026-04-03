@@ -143,9 +143,11 @@ symlink_file() {
   local dest="$2"
   local force="${3:-false}"
 
-  # Already linked correctly
-  if [ -L "$dest" ] && [ "$src" = "$(realpath "$dest" 2>/dev/null)" ]; then
-    return 1
+  # Already linked correctly — compare absolute symlink target
+  if [ -L "$dest" ]; then
+    local link_target
+    link_target="$(readlink "$dest")"
+    [ "$src" = "$link_target" ] && return 1
   fi
 
   # Existing non-symlink file
@@ -215,7 +217,7 @@ install_type() {
         if symlink_file "$file" "$target/skills/$name/$rel" "$force"; then
           ensure_gitignored "$project_path" "$target/skills/$name/$rel"
         fi
-      done < <(/usr/bin/find "$skill_dir" -type f -print0)
+      done < <(command find "$skill_dir" -type f -print0)
       log "Installed skill: $name"
     else
       # All skills
@@ -289,7 +291,7 @@ remove_items() {
         rm "$link"
         info "Removed: ${link#"$target/"}"
         ((count++)) || true
-      done < <(/usr/bin/find "$target/$dir" -type l -print0 2>/dev/null)
+      done < <(command find "$target/$dir" -type l -print0 2>/dev/null)
     done
     # .github templates
     if [ -d "$project_path/.github" ]; then
@@ -297,7 +299,7 @@ remove_items() {
         rm "$link"
         info "Removed: ${link#"$project_path/"}"
         ((count++)) || true
-      done < <(/usr/bin/find "$project_path/.github" -type l -print0 2>/dev/null)
+      done < <(command find "$project_path/.github" -type l -print0 2>/dev/null)
     fi
     [ -f "$target/settings.json" ] && rm "$target/settings.json" && ((count++)) || true
     log "Removed $count file(s). Run setup.sh again to reinstall."
@@ -333,7 +335,7 @@ remove_items() {
       while IFS= read -r -d '' link; do
         rm "$link"
         ((count++)) || true
-      done < <(/usr/bin/find "$dir" -type l -print0 2>/dev/null)
+      done < <(command find "$dir" -type l -print0 2>/dev/null)
       log "Removed $count $type symlink(s)"
     else
       warn "No $type installed"
@@ -353,7 +355,7 @@ clean_stale() {
         warn "Removed stale: ${link#"$target/"}"
         ((stale_count++)) || true
       fi
-    done < <(/usr/bin/find "$target/$dir" -type l -print0 2>/dev/null)
+    done < <(command find "$target/$dir" -type l -print0 2>/dev/null)
   done
   if [ "$stale_count" -gt 0 ]; then
     log "Cleaned $stale_count stale symlink(s)"
