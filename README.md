@@ -50,7 +50,7 @@ Everything goes into the project's `.claude/` directory:
 | `rules/typescript/` | TypeScript-specific patterns |
 | `rules/*.md` | Project rules (nestjs, prisma, etc.) |
 | `agents/` | Code reviewer, security auditor |
-| `commands/` | create-pr, deliver, dispatch, op-create, op-read, op-update |
+| `commands/` | op, deliver, dispatch, pr |
 | `skills/` | interview, playwright-cli |
 | `settings.json` | Shared permissions (committed) |
 | `settings.local.json` | Project config + API keys (gitignored) |

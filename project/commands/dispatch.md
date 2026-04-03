@@ -117,7 +117,7 @@ so it skips planning/interview and goes straight to execution.
 After /deliver completes, report: branch, PR URL, files changed, test results.
 ```
 
-`/deliver` handles the full workflow: read ticket → branch → execute → /create-pr → /op update.
+`/deliver` handles the full workflow: read ticket → branch → execute → /pr → /op update.
 
 ### 5. Failure Handling
 

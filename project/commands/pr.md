@@ -1,11 +1,11 @@
-# Create Pull Request
+# Pull Request
 
 Full PR workflow: review changes, update docs if needed, push, and create/update PR using the project template.
 
 ## Usage
 
 ```
-/create-pr
+/pr
 ```
 
 ## Workflow
@@ -14,8 +14,8 @@ Full PR workflow: review changes, update docs if needed, push, and create/update
 
 ```bash
 git status
-git log --oneline develop..HEAD
-git diff develop...HEAD --stat
+git log --oneline ${BASE_BRANCH}..HEAD
+git diff ${BASE_BRANCH}...HEAD --stat
 ```
 
 Understand the full scope of changes (all commits, not just the latest).
@@ -24,11 +24,11 @@ Understand the full scope of changes (all commits, not just the latest).
 
 **This step is a BLOCKING prerequisite.** You MUST run the code review before proceeding to pre-flight checks or PR creation.
 
-Run **code-reviewer** agent on the full diff (`git diff develop...HEAD`):
+Run **code-reviewer** agent on the full diff (`git diff ${BASE_BRANCH}...HEAD`):
 
 ```bash
 # Pass the diff scope to the reviewer
-git diff develop...HEAD
+git diff ${BASE_BRANCH}...HEAD
 ```
 
 - Fix all CRITICAL and HIGH issues immediately
@@ -69,7 +69,7 @@ git push -u origin <branch-name>
 Use `gh pr create` with this template (matches `.github/pull_request_template.md`):
 
 ```
-gh pr create --base develop --title "<type>: <short description>" --body "$(cat <<'PREOF'
+gh pr create --base ${BASE_BRANCH} --title "<type>: <short description>" --body "$(cat <<'PREOF'
 ## Ticket
 [OP#XXXX](${OP_BASE_URL}/projects/${OP_PROJECT_SLUG}/work_packages/XXXX/activity)
 
@@ -98,6 +98,6 @@ Always show the PR URL to the user when done.
 
 - **Never skip the OP ticket link** — ask the user if not derivable from branch name
 - **Never invent a custom PR format** — always use the project template
-- **Base branch is `develop`** unless the user specifies otherwise
+- **Base branch is `${BASE_BRANCH}`** unless the user specifies otherwise
 - **PR title format**: `<type>: <description>` where type is feat/fix/refactor/docs/test/chore
 - **Don't force-push** unless explicitly asked

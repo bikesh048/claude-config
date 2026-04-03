@@ -6,7 +6,7 @@
 /op         →  OpenProject ticket operations (read, create, update)
 /deliver    →  Single task, end-to-end (the main workflow)
 /dispatch   →  Multiple tasks in parallel (uses /deliver per task)
-/create-pr  →  PR creation with code review
+/pr  →  PR creation with code review
 /interview  →  Deep discovery interview before implementation
 ```
 
@@ -35,11 +35,11 @@ End-to-end ticket implementation. The primary workflow command.
 /deliver "fix broken upload" # Adhoc (no ticket)
 ```
 
-**Flow:** /op read → plan + interview → branch → execute phase-by-phase → /create-pr → /op update
+**Flow:** /op read → plan + interview → branch → execute phase-by-phase → /pr → /op update
 
 - Only pauses for human input during planning/interview
 - Commits incrementally per phase, pushes after each
-- Delegates to: `/op`, `/interview`, `/create-pr`
+- Delegates to: `/op`, `/interview`, `/pr`
 
 ## /dispatch
 
@@ -63,12 +63,12 @@ Single task shorthand:
 - Each agent runs in an isolated worktree
 - Delegates to: `/deliver` per task
 
-## /create-pr
+## /pr
 
 Creates a GitHub PR with code review and template.
 
 ```
-/create-pr
+/pr
 ```
 
 **Flow:** code review (mandatory) → docs update → pre-flight checks (tsc, tests) → push → create PR
@@ -95,6 +95,6 @@ Asks 2-4 questions per round across multiple dimensions (scope, technical, UX, e
   └── /deliver (per task)
         ├── /op (read/create ticket)
         ├── /interview (plan + discovery)
-        ├── /create-pr (push + PR)
+        ├── /pr (push + PR)
         └── /op update (post progress)
 ```

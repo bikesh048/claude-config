@@ -23,7 +23,7 @@ Single entry point for all development work. Handles ticket reading/creation, pl
 ## Flow 1: Existing Ticket
 
 ```
-/op <id> → plan + interview → branch → execute → /create-pr → /op update
+/op <id> → plan + interview → branch → execute → /pr → /op update
 ```
 
 ### Step 1: Read Ticket
@@ -63,7 +63,7 @@ Same as Steps 4-7 below (shared across all flows).
 ## Flow 2: New Ticket
 
 ```
-plan + interview → /op create <parent> → branch → execute → /create-pr → /op update
+plan + interview → /op create <parent> → branch → execute → /pr → /op update
 ```
 
 ### Step 1: Plan + Interview
@@ -99,7 +99,7 @@ Same as below.
 ## Flow 3: Adhoc (No Ticket)
 
 ```
-plan + interview → branch → execute → /create-pr
+plan + interview → branch → execute → /pr
 ```
 
 Same as Flow 2 but skip `/op create` and `/op update`. Branch name derived from description:
@@ -139,7 +139,7 @@ After all phases:
 
 ### Step 6: Create PR
 
-Run `/create-pr` which handles:
+Run `/pr` which handles:
 - Code review (code-reviewer agent, mandatory)
 - Architecture audit (if 10+ files or 500+ lines changed)
 - Pre-flight checks (tsc, tests, lint)
@@ -186,5 +186,5 @@ For small fixes (no plan phases): single commit.
 3. **Phase = commit** — never batch multiple phases into one commit
 4. **Push early** — push after each commit (work is never lost)
 5. **AC is the exit gate** — all acceptance criteria must pass before PR
-6. **Single source of truth** — delegate to `/op`, `/create-pr`
+6. **Single source of truth** — delegate to `/op`, `/pr`
 7. **No scope creep** — implement only what the plan specifies
