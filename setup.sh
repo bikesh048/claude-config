@@ -124,8 +124,19 @@ symlink_file() {
       fi
       rm -f "$dest"
     else
-      warn "Exists (not symlink): $(basename "$dest") — use --force to replace"
-      return 1
+      read -rp "  $(basename "$dest") exists. Replace with symlink? [y/N]: " answer
+      if [[ "${answer:-N}" =~ ^[Yy] ]]; then
+        local repo_root
+        repo_root="$(git -C "$(dirname "$dest")" rev-parse --show-toplevel 2>/dev/null || echo "")"
+        if [ -n "$repo_root" ]; then
+          local rel="${dest#"$repo_root/"}"
+          git -C "$repo_root" rm --cached "$rel" 2>/dev/null || true
+        fi
+        rm -f "$dest"
+      else
+        warn "Skipped: $(basename "$dest")"
+        return 1
+      fi
     fi
   fi
 
@@ -336,10 +347,23 @@ install_default() {
 
   # settings.json (copied)
   local settings_dest="$target/settings.json"
-  [ -e "$settings_dest" ] || [ -L "$settings_dest" ] && rm -f "$settings_dest"
-  cp "$SCRIPT_DIR/settings.json" "$settings_dest"
+  if [ -f "$settings_dest" ] && [ ! -L "$settings_dest" ]; then
+    if [ "$force" != true ] && ! diff -q "$SCRIPT_DIR/settings.json" "$settings_dest" > /dev/null 2>&1; then
+      read -rp "  settings.json exists and differs. Replace? [y/N]: " answer
+      if [[ ! "${answer:-N}" =~ ^[Yy] ]]; then
+        warn "Skipped: settings.json"
+      else
+        rm -f "$settings_dest"
+        cp "$SCRIPT_DIR/settings.json" "$settings_dest"
+        log "Installed settings.json (copied)"
+      fi
+    fi
+  else
+    [ -e "$settings_dest" ] || [ -L "$settings_dest" ] && rm -f "$settings_dest"
+    cp "$SCRIPT_DIR/settings.json" "$settings_dest"
+    log "Installed settings.json (copied)"
+  fi
   ensure_gitignored "$project_path" "$settings_dest"
-  log "Installed settings.json (copied)"
 
   # Install each type from defaults.conf
   for type_var in COMMANDS RULES AGENTS SKILLS; do
