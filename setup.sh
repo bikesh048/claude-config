@@ -347,7 +347,9 @@ install_default() {
 
   # settings.json (copied)
   local settings_dest="$target/settings.json"
-  if [ -f "$settings_dest" ] && [ ! -L "$settings_dest" ]; then
+  if [ "${INSTALL_SETTINGS:-true}" != true ]; then
+    info "Skipping settings.json (INSTALL_SETTINGS=false in defaults.conf)"
+  elif [ -f "$settings_dest" ] && [ ! -L "$settings_dest" ]; then
     if [ "$force" != true ] && ! diff -q "$SCRIPT_DIR/settings.json" "$settings_dest" > /dev/null 2>&1; then
       read -rp "  settings.json exists and differs. Replace? [y/N]: " answer
       if [[ ! "${answer:-N}" =~ ^[Yy] ]]; then

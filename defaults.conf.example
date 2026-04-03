@@ -11,3 +11,6 @@ AGENTS=()
 SKILLS=()
 
 TEMPLATES=(all)
+
+# Install shared settings.json? Set to false to keep your own.
+INSTALL_SETTINGS=true
