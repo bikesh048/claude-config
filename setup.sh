@@ -237,7 +237,7 @@ remove_items() {
     # Remove everything
     header "Removing all symlinks from $target"
     local count=0
-    for dir in rules agents commands skills; do
+    for dir in rules agents commands skills templates; do
       [ -d "$target/$dir" ] || continue
       while IFS= read -r -d '' link; do
         rm "$link"
@@ -299,7 +299,7 @@ remove_items() {
 clean_stale() {
   local target="$1"
   local stale_count=0
-  for dir in rules agents commands skills; do
+  for dir in rules agents commands skills templates; do
     [ -d "$target/$dir" ] || continue
     while IFS= read -r -d '' link; do
       if [ ! -e "$link" ]; then
@@ -365,31 +365,29 @@ install_default() {
     fi
   done
 
-  # Templates
+  # Templates (symlink to both .github/ and .claude/templates/)
   eval "local templates=(\"\${TEMPLATES[@]+\"\${TEMPLATES[@]}\"}\")"
-  if [ ${#templates[@]} -gt 0 ]; then
-    mkdir -p "$project_path/.github"
+  if [ ${#templates[@]} -gt 0 ] && [ -n "${templates[0]}" ]; then
+    mkdir -p "$project_path/.github" "$target/templates"
+    local tmpl_files=()
     if [ "${templates[0]}" = "all" ]; then
-      for tmpl in "$SCRIPT_DIR/templates/"*.md; do
-        [ -f "$tmpl" ] || continue
-        local fname
-        fname="$(basename "$tmpl")"
-        if symlink_file "$tmpl" "$project_path/.github/$fname" "$force"; then
-          ensure_gitignored "$project_path" "$project_path/.github/$fname"
-          log "Installed template: $fname"
-        fi
-      done
+      for f in "$SCRIPT_DIR/templates/"*.md; do [ -f "$f" ] && tmpl_files+=("$f"); done
     else
-      for tmpl in "${templates[@]}"; do
-        local src="$SCRIPT_DIR/templates/$tmpl"
-        if [ -f "$src" ]; then
-          if symlink_file "$src" "$project_path/.github/$tmpl" "$force"; then
-            ensure_gitignored "$project_path" "$project_path/.github/$tmpl"
-            log "Installed template: $tmpl"
-          fi
-        fi
-      done
+      for t in "${templates[@]}"; do [ -f "$SCRIPT_DIR/templates/$t" ] && tmpl_files+=("$SCRIPT_DIR/templates/$t"); done
     fi
+    for tmpl in "${tmpl_files[@]}"; do
+      local fname
+      fname="$(basename "$tmpl")"
+      # .github/ (GitHub reads this)
+      if symlink_file "$tmpl" "$project_path/.github/$fname" "$force"; then
+        ensure_gitignored "$project_path" "$project_path/.github/$fname"
+      fi
+      # .claude/templates/ (commands reference this)
+      if symlink_file "$tmpl" "$target/templates/$fname" "$force"; then
+        ensure_gitignored "$project_path" "$target/templates/$fname"
+      fi
+      log "Installed template: $fname"
+    done
   fi
 
   echo ""
