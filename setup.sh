@@ -320,6 +320,10 @@ install_default() {
   local force="${2:-false}"
   local target="$project_path/.claude"
 
+  # Load defaults
+  # shellcheck disable=SC1091
+  source "$SCRIPT_DIR/defaults.conf"
+
   create_local_settings "$project_path"
   mkdir -p "$target"
   clean_stale "$target"
@@ -333,25 +337,61 @@ install_default() {
   ensure_gitignored "$project_path" "$settings_dest"
   log "Installed settings.json (copied)"
 
-  # Commands
-  install_type "$project_path" "commands" "" "$force"
+  # Install each type from defaults.conf
+  for type_var in COMMANDS RULES AGENTS SKILLS; do
+    local type_dir
+    case "$type_var" in
+      COMMANDS) type_dir="commands" ;;
+      RULES)    type_dir="rules" ;;
+      AGENTS)   type_dir="agents" ;;
+      SKILLS)   type_dir="skills" ;;
+    esac
 
-  # Templates
-  mkdir -p "$project_path/.github"
-  for tmpl in "$SCRIPT_DIR/templates/"*.md; do
-    [ -f "$tmpl" ] || continue
-    local fname
-    fname="$(basename "$tmpl")"
-    if symlink_file "$tmpl" "$project_path/.github/$fname" "$force"; then
-      ensure_gitignored "$project_path" "$project_path/.github/$fname"
-      log "Installed template: $fname"
+    eval "local items=(\"\${${type_var}[@]+\"\${${type_var}[@]}\"}\")"
+    if [ ${#items[@]} -eq 0 ] || [ -z "${items[0]}" ]; then
+      continue
+    fi
+
+    if [ "${items[0]}" = "all" ]; then
+      install_type "$project_path" "$type_dir" "" "$force"
+    else
+      for item in "${items[@]}"; do
+        install_type "$project_path" "$type_dir" "$item" "$force"
+      done
     fi
   done
 
+  # Templates
+  eval "local templates=(\"\${TEMPLATES[@]+\"\${TEMPLATES[@]}\"}\")"
+  if [ ${#templates[@]} -gt 0 ]; then
+    mkdir -p "$project_path/.github"
+    if [ "${templates[0]}" = "all" ]; then
+      for tmpl in "$SCRIPT_DIR/templates/"*.md; do
+        [ -f "$tmpl" ] || continue
+        local fname
+        fname="$(basename "$tmpl")"
+        if symlink_file "$tmpl" "$project_path/.github/$fname" "$force"; then
+          ensure_gitignored "$project_path" "$project_path/.github/$fname"
+          log "Installed template: $fname"
+        fi
+      done
+    else
+      for tmpl in "${templates[@]}"; do
+        local src="$SCRIPT_DIR/templates/$tmpl"
+        if [ -f "$src" ]; then
+          if symlink_file "$src" "$project_path/.github/$tmpl" "$force"; then
+            ensure_gitignored "$project_path" "$project_path/.github/$tmpl"
+            log "Installed template: $tmpl"
+          fi
+        fi
+      done
+    fi
+  fi
+
   echo ""
   log "Setup complete!"
-  echo "  Commands and templates symlinked."
-  echo "  Add extras: --add rule, --add agent, --add skill"
+  echo "  Use --list to see available items."
+  echo "  Use --add/--remove to customize."
 }
 
 # ---------- List available items ----------
