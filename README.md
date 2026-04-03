@@ -18,6 +18,14 @@ cp defaults.conf.example defaults.conf
 # First run prompts for settings.local.json (API keys, project config)
 ```
 
+## For New Team Members
+
+1. Clone this repo
+2. `cp defaults.conf.example defaults.conf` (or let first run auto-copy)
+3. Run `./setup.sh ~/projects/your-project`
+4. Fill in `settings.local.json` when prompted
+5. Done
+
 ## Usage
 
 ```bash
@@ -95,6 +103,9 @@ Created per project on first run. Loaded by Claude Code automatically at session
 }
 ```
 
+**How to get your OpenProject API key:**
+My Account → Access Tokens → API → Generate
+
 ## Repo Structure
 
 ```
@@ -111,13 +122,6 @@ claude-config/
 └── templates/                    # PR template
 ```
 
-## For New Team Members
-
-1. Clone this repo
-2. `cp defaults.conf.example defaults.conf` (or let first run auto-copy)
-3. Run `./setup.sh ~/projects/your-project`
-4. Fill in `settings.local.json` when prompted
-5. Done
 
 ## Command Reference
 
