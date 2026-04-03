@@ -86,16 +86,16 @@ Rules:
 
 If user wants to start:
 
-**Branch naming** — derive from ticket type and ID:
+**Branch name** — use the exact name from the ticket's **Quick Snippets** custom field.
+Do NOT generate or slugify the branch name — always read it from the ticket API response.
 
-| Type | Prefix |
-|------|--------|
-| Bug | `bug/` |
-| Task | `task/` |
-| Tech Debt | `tech-debt/` |
-| User story | `story/` |
+Extract from the API response:
+```bash
+BRANCH=$(curl -s "${OP_BASE_URL}/api/v3/work_packages/${TICKET_ID}" \
+  -u "apikey:${OPENPROJECT_API_KEY}" | jq -r '.customField31 // empty')
+```
 
-Slugify subject: `${PREFIX}${TICKET_ID}-${SLUG}` (max 50 chars)
+If Quick Snippets is empty, ask the user for the branch name.
 
 ```bash
 git checkout ${BASE_BRANCH} && git pull origin ${BASE_BRANCH} && git checkout -b "${BRANCH}"
@@ -159,16 +159,39 @@ curl -s -X POST \
 
 Always set `startDate` to today. If description provided, add `"description": {"raw": "..."}`.
 
-### 4. Report
+### 4. Generate branch name and update ticket
+
+Derive branch name from ticket type and ID:
+
+| Type | Prefix |
+|------|--------|
+| Bug | `bug/` |
+| Task | `task/` |
+| Tech Debt | `tech-debt/` |
+| User story | `story/` |
+
+Slugify subject: `${PREFIX}${TICKET_ID}-${SLUG}` (lowercase, spaces to hyphens, keep all words, max 50 chars).
+
+**Write the branch name to the ticket's Quick Snippets field** (`customField31`) so it becomes the source of truth:
+
+```bash
+LOCK=$(curl -s "${OP_BASE_URL}/api/v3/work_packages/${NEW_ID}" \
+  -u "apikey:${OPENPROJECT_API_KEY}" | jq '.lockVersion')
+
+curl -s -X PATCH \
+  "${OP_BASE_URL}/api/v3/work_packages/${NEW_ID}" \
+  -H "Content-Type: application/json" \
+  -u "apikey:${OPENPROJECT_API_KEY}" \
+  -d "{\"lockVersion\": ${LOCK}, \"customField31\": \"${BRANCH}\"}"
+```
+
+### 5. Report
 
 ```
 Created OP#1750 (Bug): "Fix cache invalidation on publish"
   Parent: OP#1722
   URL: ${OP_BASE_URL}/projects/${OP_PROJECT_SLUG}/work_packages/1750
-
-Quick Snippets:
-  Branch:   bug/1750-fix-cache-invalidation-on-publish
-  Checkout: git checkout -b bug/1750-fix-cache-invalidation-on-publish
+  Branch: bug/1750-fix-cache-invalidation-on-publish
 ```
 
 Then ask: **"Create branch and start working?"**
