@@ -3,30 +3,43 @@
 ## Overview
 
 ```
-/deliver  →  Single task, end-to-end (the main workflow)
-/dispatch →  Multiple tasks in parallel (uses /deliver per task)
-/create-pr → PR creation with code review
-/op-create → Create OpenProject ticket
-/op-read   → Read OpenProject ticket
-/op-update → Post EOD update to ticket
-/interview → Deep discovery interview before implementation
+/op         →  OpenProject ticket operations (read, create, update)
+/deliver    →  Single task, end-to-end (the main workflow)
+/dispatch   →  Multiple tasks in parallel (uses /deliver per task)
+/create-pr  →  PR creation with code review
+/interview  →  Deep discovery interview before implementation
 ```
+
+## /op
+
+OpenProject ticket manager. One command for read, create, and update.
+
+```
+/op 1790                    # Read ticket
+/op create 1322             # Create ticket under parent (asks for title/type)
+/op create 1322 task        # Create with specified type
+/op update                  # Post EOD update (ticket from branch)
+/op update 1790             # Post EOD update on specific ticket
+/op                         # Read ticket from current branch
+```
+
+Types: `bug`, `task`, `tech_debt`, `story`
 
 ## /deliver
 
 End-to-end ticket implementation. The primary workflow command.
 
 ```
-/deliver OP#1790                      # Existing ticket
-/deliver 1322 "build envctl"          # New ticket under parent #1322
-/deliver "fix broken image upload"    # Adhoc (no ticket)
+/deliver 1790               # Existing ticket
+/deliver create 1322        # Create ticket under parent, then deliver
+/deliver "fix broken upload" # Adhoc (no ticket)
 ```
 
-**Flow:** read ticket → plan + interview → branch → execute phase-by-phase → create PR → update ticket
+**Flow:** /op read → plan + interview → branch → execute phase-by-phase → /create-pr → /op update
 
 - Only pauses for human input during planning/interview
 - Commits incrementally per phase, pushes after each
-- Delegates to: `/op-read`, `/interview`, `/create-pr`, `/op-update`
+- Delegates to: `/op`, `/interview`, `/create-pr`
 
 ## /dispatch
 
@@ -64,36 +77,6 @@ Creates a GitHub PR with code review and template.
 - Links OP ticket automatically
 - Architecture audit triggered if 10+ files or 500+ lines changed
 
-## /op-create
-
-Create an OpenProject work package.
-
-```
-/op-create <parent_id> <type> "<subject>" "[description]"
-```
-
-Types: `bug`, `task`, `tech_debt`, `story`
-
-## /op-read
-
-Read an OpenProject ticket and output a planning summary.
-
-```
-/op-read [ticket_id]
-```
-
-If `ticket_id` is omitted, extracts from current branch name (e.g. `bug/1723-fix-...` -> `1723`).
-
-## /op-update
-
-Post an EOD progress update as a comment on a ticket.
-
-```
-/op-update [ticket_id]
-```
-
-Gathers context from recent commits, fills EOD template (Progress, Next Steps, Blockers, ETA, Links), confirms with user, then posts.
-
 ## /interview
 
 Structured discovery interview to surface gaps and tradeoffs before implementation.
@@ -103,17 +86,15 @@ Structured discovery interview to surface gaps and tradeoffs before implementati
 /interview <topic>      # Interview about specific feature
 ```
 
-Asks 2-4 questions per round across multiple dimensions (scope, technical, UX, edge cases). Produces a spec file in `.claude/specs/`.
+Asks 2-4 questions per round across multiple dimensions (scope, technical, UX, edge cases). Produces a spec file.
 
 ## Command Relationships
 
 ```
 /dispatch
   └── /deliver (per task)
-        ├── /op-read (fetch ticket)
+        ├── /op (read/create ticket)
         ├── /interview (plan + discovery)
         ├── /create-pr (push + PR)
-        └── /op-update (post progress)
-
-/op-create  (standalone — create new tickets)
+        └── /op update (post progress)
 ```

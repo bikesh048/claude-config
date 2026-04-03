@@ -117,7 +117,7 @@ so it skips planning/interview and goes straight to execution.
 After /deliver completes, report: branch, PR URL, files changed, test results.
 ```
 
-`/deliver` handles the full workflow: read ticket → branch → execute → create-pr → op-update.
+`/deliver` handles the full workflow: read ticket → branch → execute → /create-pr → /op update.
 
 ### 5. Failure Handling
 
@@ -129,7 +129,7 @@ If an agent fails (tests don't pass after 3 attempts, type-check errors):
    - Error output
    - Files changed so far
    - Suggested next steps
-3. Run `/op-update` noting the failure
+3. Run `/op update` noting the failure
 4. Report failure to user
 
 No retry support. Re-dispatch fresh with adjusted description if needed.
@@ -172,5 +172,5 @@ Needs attention: PR #53 (draft — tests failing)
 8. **PR to develop** — always target develop branch
 9. **One task = one agent = one branch = one PR** — atomic units of work
 10. **Pre-check importer server** — fail fast for extraction tasks if localhost:3030 is down
-11. **Auto-update OP tickets** — each agent runs `/op-update` after PR creation
+11. **Auto-update OP tickets** — each agent runs `/op update` after PR creation
 12. **Draft PR on failure** — push broken branch + draft PR with diagnostics, never silently discard work
