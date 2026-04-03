@@ -521,7 +521,13 @@ REMOVE_TYPE=""
 REMOVE_NAME=""
 
 if [ $# -eq 0 ]; then
-  usage
+  # Interactive mode — prompt for project path
+  read -rp "Project path: " PROJECT_PATH
+  if [ -z "$PROJECT_PATH" ]; then
+    usage
+  fi
+  # Expand ~ if used
+  PROJECT_PATH="${PROJECT_PATH/#\~/$HOME}"
 fi
 
 args=("$@")
@@ -590,7 +596,12 @@ done
 
 # ---------- Execute ----------
 
-[ -z "$PROJECT_PATH" ] && { error "Project path required"; usage; }
+# Prompt for path if still empty (flags given but no path)
+if [ -z "$PROJECT_PATH" ]; then
+  read -rp "Project path: " PROJECT_PATH
+  PROJECT_PATH="${PROJECT_PATH/#\~/$HOME}"
+  [ -z "$PROJECT_PATH" ] && { error "Project path required"; usage; }
+fi
 [ ! -d "$PROJECT_PATH" ] && { error "Project path not found: $PROJECT_PATH"; exit 1; }
 
 if [ "$REMOVE" = true ]; then
