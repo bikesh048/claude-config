@@ -301,18 +301,38 @@ install_project() {
     done
   fi
 
-  # --- Add symlinked dirs to .gitignore ---
+  # --- Regenerate symlink entries in .gitignore ---
   local gitignore="$project_path/.gitignore"
-  local dirs_to_ignore=(".claude/rules" ".claude/agents" ".claude/commands" ".claude/skills")
-  for dir in "${dirs_to_ignore[@]}"; do
-    if ! grep -qx "$dir" "$gitignore" 2>/dev/null; then
-      echo "$dir" >> "$gitignore"
-    fi
+  local marker_start="# claude-config:start"
+  local marker_end="# claude-config:end"
+
+  # Collect current symlinks (only in dirs we manage)
+  local symlink_entries=".claude/settings.json"
+  for managed_dir in rules agents commands skills; do
+    [ -d "$target/$managed_dir" ] || continue
+    while IFS= read -r -d '' link; do
+      symlink_entries+=$'\n'"${link#"$project_path/"}"
+    done < <(/usr/bin/find "$target/$managed_dir" -type l -print0 2>/dev/null)
   done
-  # settings.json is copied but managed by setup — gitignore it too
-  if ! grep -q '.claude/settings.json' "$gitignore" 2>/dev/null; then
-    echo ".claude/settings.json" >> "$gitignore"
+  # Also check .github for template symlinks
+  if [ -d "$project_path/.github" ]; then
+    while IFS= read -r -d '' link; do
+      symlink_entries+=$'\n'"${link#"$project_path/"}"
+    done < <(/usr/bin/find "$project_path/.github" -type l -print0 2>/dev/null)
   fi
+
+  # Remove old managed block if exists
+  if grep -q "$marker_start" "$gitignore" 2>/dev/null; then
+    /usr/bin/sed -i '' "/$marker_start/,/$marker_end/d" "$gitignore"
+  fi
+
+  # Append fresh block
+  {
+    echo ""
+    echo "$marker_start"
+    echo "$symlink_entries" | sort
+    echo "$marker_end"
+  } >> "$gitignore"
 
   echo ""
   log "Profile installed: $PROFILE_NAME"
