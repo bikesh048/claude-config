@@ -109,47 +109,6 @@ EOF
 
 }
 
-# ---------- Exclusion prompt ----------
-# Reads array named $1, prompts for exclusions, writes result back via eval
-prompt_exclusions() {
-  local arr_name="$1"
-  local label="$2"
-
-  eval "local items=(\"\${${arr_name}[@]}\")"
-
-  if [ ${#items[@]} -eq 0 ]; then
-    return
-  fi
-
-  echo ""
-  info "$label: ${items[*]}"
-  read -rp "  Exclude any? (comma-separated names, or Enter to keep all): " exclusions
-
-  if [ -n "$exclusions" ]; then
-    local new_items=()
-    IFS=',' read -ra excluded <<< "$exclusions"
-    local trimmed_exclusions=()
-    for e in "${excluded[@]}"; do
-      trimmed_exclusions+=("$(echo "$e" | xargs)")
-    done
-
-    for item in "${items[@]}"; do
-      local skip=false
-      for exc in "${trimmed_exclusions[@]}"; do
-        if [[ "$item" == "$exc" || "$item" == "${exc}.md" || "${item%.md}" == "$exc" ]]; then
-          skip=true
-          break
-        fi
-      done
-      if [ "$skip" = false ]; then
-        new_items+=("$item")
-      else
-        warn "Excluded: $item"
-      fi
-    done
-    eval "${arr_name}=(\"\${new_items[@]}\")"
-  fi
-}
 
 # ---------- Install a single file (symlink, copy, or update) ----------
 install_file() {
@@ -223,9 +182,6 @@ install_project() {
   # Create settings.local.json if it doesn't exist
   create_local_settings "$project_path"
 
-  # Show what will be installed and allow exclusions
-  header "Review items to install"
-  prompt_exclusions COMMANDS "Commands"
 
   local target="$project_path/.claude"
   mkdir -p "$target"
@@ -235,16 +191,19 @@ install_project() {
     mode_label="link"
   fi
 
-  # --- Clean stale symlinks ---
+  # --- Clean stale symlinks (only in dirs we manage) ---
   if [ "$link_mode" = true ]; then
     local stale_count=0
-    while IFS= read -r -d '' link; do
-      if [ ! -e "$link" ]; then
-        rm "$link"
-        warn "Removed stale symlink: ${link#"$target/"}"
-        ((stale_count++)) || true
-      fi
-    done < <(/usr/bin/find "$target" -type l -print0 2>/dev/null)
+    for managed_dir in rules agents commands skills; do
+      [ -d "$target/$managed_dir" ] || continue
+      while IFS= read -r -d '' link; do
+        if [ ! -e "$link" ]; then
+          rm "$link"
+          warn "Removed stale symlink: ${link#"$target/"}"
+          ((stale_count++)) || true
+        fi
+      done < <(/usr/bin/find "$target/$managed_dir" -type l -print0 2>/dev/null)
+    done
     if [ "$stale_count" -gt 0 ]; then
       log "Cleaned $stale_count stale symlink(s)"
     fi
