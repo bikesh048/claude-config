@@ -20,22 +20,19 @@ header() { echo -e "\n${BOLD}$1${NC}"; }
 usage() {
   cat <<EOF
 Usage:
-  $(basename "$0") <project-path> [--profile=<name>...] [--update] [--copy]
-  $(basename "$0") <project-path> --add <type> <name> [--copy]
+  $(basename "$0") <project-path> [--profile=<name>...]
+  $(basename "$0") <project-path> --add <type> <name>
+  $(basename "$0") <project-path> --update
   $(basename "$0") --list-profiles
 
 Options:
   --profile=<name>      Project profile (repeatable). No --profile = install all.
   --update              Update mode: show diffs, prompt accept/skip per file
-  --copy                Copy mode: copy files instead of symlinking (default is symlink).
-                        Use when you want project-specific overrides that don't flow back.
-  --add <type> <name>   Add a single item to a project. Type: skill, rule, command, agent.
+  --add <type> <name>   Add a single item. Type: skill, rule, command, agent.
   --list-profiles       List available profiles
 
-Symlink mode (default):
-  Files are symlinked from claude-config into the project's .claude/ directory.
-  Edits in the project flow back to claude-config automatically.
-  Files needing token replacement are always copied (not linked).
+All files are symlinked from claude-config into the project's .claude/ directory.
+Edits in the project flow back to claude-config automatically.
 
 Examples:
   $(basename "$0") ~/projects/tripcart-builder --profile=fullstack-ts
@@ -43,9 +40,7 @@ Examples:
   $(basename "$0") ~/projects/tripcart-builder                        # installs all profiles
   $(basename "$0") ~/projects/tripcart-builder --update
   $(basename "$0") ~/projects/tripcart-builder --add skill my-new-skill
-  $(basename "$0") ~/projects/tripcart-builder --add rule my-rule.md
   $(basename "$0") ~/projects/tripcart-builder --add command my-cmd.md
-  $(basename "$0") ~/projects/tripcart-builder --add agent my-agent.md
 EOF
   exit 1
 }
@@ -58,9 +53,7 @@ list_profiles() {
     (
       source "$conf"
       printf "  ${BOLD}%-20s${NC} %s\n" "$PROFILE_NAME" "$PROFILE_DESC"
-      printf "    Rules:    %s\n" "${RULES[*]}"
       printf "    Commands: %s\n" "${COMMANDS[*]}"
-      printf "    Skills:   %s\n" "${SKILLS[*]}"
     )
     echo ""
   done
@@ -106,23 +99,17 @@ create_local_settings() {
 }
 EOF
   log "Created settings.local.json"
-
 }
 
-
-# ---------- Install a single file (symlink, copy, or update) ----------
+# ---------- Install a single file (symlink or update) ----------
 install_file() {
   local src="$1"
   local dest="$2"
   local update_mode="${3:-false}"
-  local link_mode="${4:-false}"
 
   if [ "$update_mode" = true ] && [ -f "$dest" ]; then
-    # If already linked to the right place, no change needed
-    if [ -L "$dest" ] && [ "$link_mode" = true ]; then
-      if [ "$src" = "$(realpath "$dest")" ]; then
-        return 1
-      fi
+    if [ -L "$dest" ] && [ "$src" = "$(realpath "$dest")" ]; then
+      return 1  # Already linked correctly
     fi
 
     if diff -q "$src" "$dest" > /dev/null 2>&1; then
@@ -142,11 +129,7 @@ install_file() {
   # Remove existing file/symlink before installing
   [ -e "$dest" ] || [ -L "$dest" ] && rm -f "$dest"
 
-  if [ "$link_mode" = true ]; then
-    ln -s "$src" "$dest"
-  else
-    cp "$src" "$dest"
-  fi
+  ln -s "$src" "$dest"
   return 0
 }
 
@@ -155,7 +138,6 @@ install_project() {
   local project_path="$1"
   local profile_name="$2"
   local update_mode="${3:-false}"
-  local link_mode="${4:-false}"
 
   if [ ! -d "$project_path" ]; then
     error "Project path not found: $project_path"
@@ -182,40 +164,34 @@ install_project() {
   # Create settings.local.json if it doesn't exist
   create_local_settings "$project_path"
 
-
   local target="$project_path/.claude"
   mkdir -p "$target"
 
-  local mode_label="copy"
-  if [ "$link_mode" = true ]; then
-    mode_label="link"
-  fi
-
   # --- Clean stale symlinks (only in dirs we manage) ---
-  if [ "$link_mode" = true ]; then
-    local stale_count=0
-    for managed_dir in rules agents commands skills; do
-      [ -d "$target/$managed_dir" ] || continue
-      while IFS= read -r -d '' link; do
-        if [ ! -e "$link" ]; then
-          rm "$link"
-          warn "Removed stale symlink: ${link#"$target/"}"
-          ((stale_count++)) || true
-        fi
-      done < <(/usr/bin/find "$target/$managed_dir" -type l -print0 2>/dev/null)
-    done
-    if [ "$stale_count" -gt 0 ]; then
-      log "Cleaned $stale_count stale symlink(s)"
-    fi
+  local stale_count=0
+  for managed_dir in rules agents commands skills; do
+    [ -d "$target/$managed_dir" ] || continue
+    while IFS= read -r -d '' link; do
+      if [ ! -e "$link" ]; then
+        rm "$link"
+        warn "Removed stale symlink: ${link#"$target/"}"
+        ((stale_count++)) || true
+      fi
+    done < <(/usr/bin/find "$target/$managed_dir" -type l -print0 2>/dev/null)
+  done
+  if [ "$stale_count" -gt 0 ]; then
+    log "Cleaned $stale_count stale symlink(s)"
   fi
 
   # --- Install settings ---
-  header "Installing to $target (mode: $mode_label)"
+  header "Installing to $target"
 
-  # settings.json is always copied (project-specific permissions)
-  if install_file "$SCRIPT_DIR/config/settings.json" "$target/settings.json" "$update_mode" false; then
-    log "Installed settings.json (copied)"
-  fi
+  # settings.json — always copied (may differ per project)
+  local settings_src="$SCRIPT_DIR/config/settings.json"
+  local settings_dest="$target/settings.json"
+  [ -e "$settings_dest" ] || [ -L "$settings_dest" ] && rm -f "$settings_dest"
+  cp "$settings_src" "$settings_dest"
+  log "Installed settings.json (copied)"
 
   # --- Install rules ---
   mkdir -p "$target/rules"
@@ -225,7 +201,7 @@ install_project() {
     [ -f "$rule_file" ] || continue
     local fname
     fname="$(basename "$rule_file")"
-    if install_file "$rule_file" "$target/rules/$fname" "$update_mode" "$link_mode"; then
+    if install_file "$rule_file" "$target/rules/$fname" "$update_mode"; then
       log "Installed rule: $fname"
     fi
   done
@@ -240,7 +216,7 @@ install_project() {
           [ -f "$rule_file" ] || continue
           local fname
           fname="$(basename "$rule_file")"
-          if install_file "$rule_file" "$target/rules/$dir/$fname" "$update_mode" "$link_mode"; then
+          if install_file "$rule_file" "$target/rules/$dir/$fname" "$update_mode"; then
             log "Installed rule: $dir/$fname"
           fi
         done
@@ -256,7 +232,7 @@ install_project() {
     for agent in "${AGENTS[@]}"; do
       local src="$SCRIPT_DIR/config/agents/$agent"
       if [ -f "$src" ]; then
-        if install_file "$src" "$target/agents/$agent" "$update_mode" "$link_mode"; then
+        if install_file "$src" "$target/agents/$agent" "$update_mode"; then
           log "Installed agent: $agent"
         fi
       else
@@ -271,7 +247,7 @@ install_project() {
     for cmd in "${COMMANDS[@]}"; do
       local src="$SCRIPT_DIR/config/commands/$cmd"
       if [ -f "$src" ]; then
-        if install_file "$src" "$target/commands/$cmd" "$update_mode" "$link_mode"; then
+        if install_file "$src" "$target/commands/$cmd" "$update_mode"; then
           log "Installed command: $cmd"
         fi
       else
@@ -290,7 +266,7 @@ install_project() {
         while IFS= read -r -d '' file; do
           local rel="${file#"$src_dir"/}"
           mkdir -p "$target/skills/$skill/$(dirname "$rel")"
-          if install_file "$file" "$target/skills/$skill/$rel" "$update_mode" "$link_mode"; then
+          if install_file "$file" "$target/skills/$skill/$rel" "$update_mode"; then
             skill_changed=true
           fi
         done < <(/usr/bin/find "$src_dir" -type f -print0)
@@ -303,7 +279,6 @@ install_project() {
     done
   fi
 
-
   # --- Install templates ---
   if [ ${#TEMPLATES[@]} -gt 0 ]; then
     mkdir -p "$project_path/.github"
@@ -312,11 +287,12 @@ install_project() {
       if [ -f "$src" ]; then
         local dest="$project_path/.github/$tmpl"
         if [ "$update_mode" = true ]; then
-          if install_file "$src" "$dest" "$update_mode" "$link_mode"; then
+          if install_file "$src" "$dest" "$update_mode"; then
             log "Installed template: $tmpl"
           fi
         elif [ ! -f "$dest" ]; then
-          install_file "$src" "$dest" false "$link_mode"
+          [ -e "$dest" ] || [ -L "$dest" ] && rm -f "$dest"
+          ln -s "$src" "$dest"
           log "Installed template: $tmpl"
         else
           warn "Template already exists: $tmpl (skipped)"
@@ -325,13 +301,23 @@ install_project() {
     done
   fi
 
-  echo ""
-  log "Profile installed: $PROFILE_NAME (mode: $mode_label)"
-  echo ""
-  if [ "$link_mode" = true ]; then
-    echo "  All files symlinked to claude-config repo."
-    echo "  Edits in .claude/ flow back to claude-config automatically."
+  # --- Add symlinked dirs to .gitignore ---
+  local gitignore="$project_path/.gitignore"
+  local dirs_to_ignore=(".claude/rules" ".claude/agents" ".claude/commands" ".claude/skills")
+  for dir in "${dirs_to_ignore[@]}"; do
+    if ! grep -qx "$dir" "$gitignore" 2>/dev/null; then
+      echo "$dir" >> "$gitignore"
+    fi
+  done
+  # settings.json is copied but managed by setup — gitignore it too
+  if ! grep -q '.claude/settings.json' "$gitignore" 2>/dev/null; then
+    echo ".claude/settings.json" >> "$gitignore"
   fi
+
+  echo ""
+  log "Profile installed: $PROFILE_NAME"
+  echo "  All files symlinked to claude-config repo."
+  echo "  Edits in .claude/ flow back to claude-config automatically."
   echo "  Config loaded at runtime from settings.local.json."
 }
 
@@ -340,7 +326,6 @@ add_item() {
   local project_path="$1"
   local item_type="$2"
   local item_name="$3"
-  local link_mode="${4:-true}"
 
   if [ ! -d "$project_path" ]; then
     error "Project path not found: $project_path"
@@ -364,7 +349,7 @@ add_item() {
       while IFS= read -r -d '' file; do
         local rel="${file#"$src_dir"/}"
         mkdir -p "$target/skills/$item_name/$(dirname "$rel")"
-        install_file "$file" "$target/skills/$item_name/$rel" false "$link_mode"
+        install_file "$file" "$target/skills/$item_name/$rel"
       done < <(/usr/bin/find "$src_dir" -type f -print0)
       log "Added skill: $item_name"
       ;;
@@ -377,7 +362,7 @@ add_item() {
         exit 1
       fi
       mkdir -p "$target/rules"
-      install_file "$src" "$target/rules/$item_name" false "$link_mode"
+      install_file "$src" "$target/rules/$item_name"
       log "Added rule: $item_name"
       ;;
     command)
@@ -389,7 +374,7 @@ add_item() {
         exit 1
       fi
       mkdir -p "$target/commands"
-      install_file "$src" "$target/commands/$item_name" false "$link_mode"
+      install_file "$src" "$target/commands/$item_name"
       log "Added command: $item_name"
       ;;
     agent)
@@ -401,7 +386,7 @@ add_item() {
         exit 1
       fi
       mkdir -p "$target/agents"
-      install_file "$src" "$target/agents/$item_name" false "$link_mode"
+      install_file "$src" "$target/agents/$item_name"
       log "Added agent: $item_name"
       ;;
     *)
@@ -415,7 +400,6 @@ add_item() {
 PROJECT_PATH=""
 PROFILES=()
 UPDATE=false
-LINK=true
 ADD_TYPE=""
 ADD_NAME=""
 
@@ -427,7 +411,6 @@ for arg in "$@"; do
   case "$arg" in
     --profile=*)        PROFILES+=("${arg#--profile=}") ;;
     --update)           UPDATE=true ;;
-    --copy)             LINK=false ;;
     --add)              ADD_TYPE="__pending__" ;;
     --list-profiles)    list_profiles; exit 0 ;;
     --help|-h)          usage ;;
@@ -458,7 +441,7 @@ if [ -n "$ADD_TYPE" ] && [ "$ADD_TYPE" != "__pending__" ]; then
     error "Name required: --add <type> <name>"
     usage
   fi
-  add_item "$PROJECT_PATH" "$ADD_TYPE" "$ADD_NAME" "$LINK"
+  add_item "$PROJECT_PATH" "$ADD_TYPE" "$ADD_NAME"
   exit 0
 fi
 
@@ -476,5 +459,5 @@ if [ ${#PROFILES[@]} -eq 0 ]; then
 fi
 
 for profile in "${PROFILES[@]}"; do
-  install_project "$PROJECT_PATH" "$profile" "$UPDATE" "$LINK"
+  install_project "$PROJECT_PATH" "$profile" "$UPDATE"
 done

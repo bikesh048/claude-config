@@ -92,12 +92,14 @@ claude-config/
     └── templates/
 ```
 
-## Symlink vs Copy
+## How Symlinks Work
 
-| Mode | When | Behavior |
-|------|------|----------|
-| **Symlink** (default) | All files | Edit once, all projects update |
-| **Copy** (`--copy`) | Override default | Independent copies, no sync |
+All shared files are symlinked from claude-config into the project's `.claude/` directory.
+Edits in any project flow back to claude-config automatically.
+
+Symlinked directories (`.claude/rules`, `.claude/commands`, `.claude/agents`) are
+automatically added to the project's `.gitignore` by `setup.sh`. Only project-specific
+files (like custom skills or local rules) should be committed to the project repo.
 
 ## Command Reference
 
