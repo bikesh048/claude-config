@@ -23,6 +23,7 @@ Usage:
   $(basename "$0") <project-path> [--force]
   $(basename "$0") <project-path> --add <type> [name]
   $(basename "$0") <project-path> --remove [type] [name]
+  $(basename "$0") --list [type]
 
 Setup (default):
   Symlinks all commands and templates into the project's .claude/ directory.
@@ -33,6 +34,7 @@ Add extras:
   --add agent [name]      Add one or all agents
   --add skill [name]      Add one or all skills
   --add command [name]    Add one or all commands
+  --list [type]           List available items (commands, rules, agents, skills)
 
 Remove:
   --remove                Remove all symlinks
@@ -352,6 +354,57 @@ install_default() {
   echo "  Add extras: --add rule, --add agent, --add skill"
 }
 
+# ---------- List available items ----------
+list_items() {
+  local type="${1:-}"
+
+  list_dir() {
+    local dir="$1"
+    local label="$2"
+    if [ -d "$SCRIPT_DIR/$dir" ]; then
+      echo -e "\n${BOLD}$label:${NC}"
+      if [ "$dir" = "skills" ]; then
+        for d in "$SCRIPT_DIR/$dir"/*/; do
+          [ -d "$d" ] || continue
+          echo "  $(basename "$d")"
+        done
+      else
+        for f in "$SCRIPT_DIR/$dir"/*.md; do
+          [ -f "$f" ] || continue
+          echo "  $(basename "$f")"
+        done
+        # Subdirs (e.g. rules/typescript/)
+        for d in "$SCRIPT_DIR/$dir"/*/; do
+          [ -d "$d" ] || continue
+          local dname
+          dname="$(basename "$d")"
+          for f in "$d"*.md; do
+            [ -f "$f" ] || continue
+            echo "  $dname/$(basename "$f")"
+          done
+        done
+      fi
+    fi
+  }
+
+  if [ -z "$type" ]; then
+    list_dir "commands" "Commands"
+    list_dir "rules" "Rules"
+    list_dir "agents" "Agents"
+    list_dir "skills" "Skills"
+    list_dir "templates" "Templates"
+  else
+    case "$type" in
+      commands|command) list_dir "commands" "Commands" ;;
+      rules|rule)      list_dir "rules" "Rules" ;;
+      agents|agent)    list_dir "agents" "Agents" ;;
+      skills|skill)    list_dir "skills" "Skills" ;;
+      templates|template) list_dir "templates" "Templates" ;;
+      *) error "Unknown type: $type"; exit 1 ;;
+    esac
+  fi
+}
+
 # ---------- Parse args ----------
 PROJECT_PATH=""
 FORCE=false
@@ -371,6 +424,15 @@ while [ $i -lt ${#args[@]} ]; do
   arg="${args[$i]}"
   case "$arg" in
     --force)  FORCE=true ;;
+    --list)
+      list_type=""
+      if [ $((i+1)) -lt ${#args[@]} ] && [[ "${args[$((i+1))]}" =~ ^(rules|agents|commands|skills|templates|rule|agent|command|skill|template)$ ]]; then
+        ((i++))
+        list_type="${args[$i]}"
+      fi
+      list_items "$list_type"
+      exit 0
+      ;;
     --remove)
       REMOVE=true
       # Check if next arg is a type (not a flag or path)
