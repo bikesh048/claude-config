@@ -320,7 +320,11 @@ install_default() {
   local force="${2:-false}"
   local target="$project_path/.claude"
 
-  # Load defaults
+  # Load defaults (copy from example if missing)
+  if [ ! -f "$SCRIPT_DIR/defaults.conf" ]; then
+    cp "$SCRIPT_DIR/defaults.conf.example" "$SCRIPT_DIR/defaults.conf"
+    log "Created defaults.conf from example"
+  fi
   # shellcheck disable=SC1091
   source "$SCRIPT_DIR/defaults.conf"
 
