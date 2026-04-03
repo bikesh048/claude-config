@@ -20,23 +20,29 @@ header() { echo -e "\n${BOLD}$1${NC}"; }
 usage() {
   cat <<EOF
 Usage:
-  $(basename "$0") <project-path> [--profile=<name>...]
+  $(basename "$0") <project-path> [--profile=<name>...] [--force]
   $(basename "$0") <project-path> --add <type> <name>
+  $(basename "$0") <project-path> --clean
   $(basename "$0") --list-profiles
 
 Options:
   --profile=<name>      Project profile (repeatable). No --profile = install all.
+  --force               Replace existing files with symlinks (untrack from git too).
+  --clean               Remove all symlinks created by setup (reset to clean state).
   --add <type> <name>   Add a single item. Type: skill, rule, command, agent.
   --list-profiles       List available profiles
 
-All files are symlinked from claude-config into the project's .claude/ directory.
-Edits in the project flow back to claude-config automatically.
-Running setup again is safe — it cleans stale symlinks and refreshes .gitignore.
+Default behavior:
+  - If file doesn't exist → create symlink + add to .gitignore
+  - If file exists (not a symlink) → skip (use --force to replace)
+  - If symlink exists and correct → skip
+  - If symlink exists but stale → replace
 
 Examples:
+  $(basename "$0") ~/projects/tripcart-builder                        # install all profiles
   $(basename "$0") ~/projects/tripcart-builder --profile=fullstack-ts
-  $(basename "$0") ~/projects/tripcart-builder --profile=fullstack-ts --profile=laravel-php
-  $(basename "$0") ~/projects/tripcart-builder                        # installs all profiles
+  $(basename "$0") ~/projects/tripcart-builder --force                # replace existing files
+  $(basename "$0") ~/projects/tripcart-builder --clean                # remove all symlinks
   $(basename "$0") ~/projects/tripcart-builder --add command my-cmd.md
 EOF
   exit 1
@@ -102,56 +108,83 @@ EOF
 symlink_file() {
   local src="$1"
   local dest="$2"
+  local force="${3:-false}"
 
   # Already linked correctly — skip
   if [ -L "$dest" ] && [ "$src" = "$(realpath "$dest" 2>/dev/null)" ]; then
     return 1
   fi
 
-  # Remove existing file/symlink
-  [ -e "$dest" ] || [ -L "$dest" ] && rm -f "$dest"
+  # Existing non-symlink file
+  if [ -e "$dest" ] && [ ! -L "$dest" ]; then
+    if [ "$force" = true ]; then
+      # Untrack from git if tracked
+      local rel_to_repo="${dest#"$(git -C "$(dirname "$dest")" rev-parse --show-toplevel 2>/dev/null)/"}"
+      git -C "$(dirname "$dest")" rm --cached "$rel_to_repo" 2>/dev/null || true
+      rm -f "$dest"
+    else
+      warn "Exists (not symlink): $(basename "$dest") — use --force to replace"
+      return 1
+    fi
+  fi
+
+  # Remove stale symlink
+  [ -L "$dest" ] && rm -f "$dest"
 
   ln -s "$src" "$dest"
   return 0
 }
 
-# ---------- Ensure symlinks are in .gitignore ----------
+# ---------- Ensure symlink is in .gitignore ----------
 ensure_gitignored() {
   local project_path="$1"
-  local target="$project_path/.claude"
+  local file_path="$2"
   local gitignore="$project_path/.gitignore"
+  local rel="${file_path#"$project_path/"}"
 
-  # Always gitignore settings.json (copied but managed by setup)
-  if ! grep -qx '.claude/settings.json' "$gitignore" 2>/dev/null; then
-    echo ".claude/settings.json" >> "$gitignore"
+  if ! grep -qx "$rel" "$gitignore" 2>/dev/null; then
+    echo "$rel" >> "$gitignore"
   fi
+}
 
-  # Check each symlink in managed dirs
+# ---------- Clean all symlinks ----------
+clean_symlinks() {
+  local project_path="$1"
+  local target="$project_path/.claude"
+
+  header "Cleaning symlinks from $target"
+
+  local count=0
   for managed_dir in rules agents commands skills; do
     [ -d "$target/$managed_dir" ] || continue
     while IFS= read -r -d '' link; do
-      local rel="${link#"$project_path/"}"
-      if ! grep -qx "$rel" "$gitignore" 2>/dev/null; then
-        echo "$rel" >> "$gitignore"
-      fi
+      rm "$link"
+      info "Removed: ${link#"$target/"}"
+      ((count++)) || true
     done < <(/usr/bin/find "$target/$managed_dir" -type l -print0 2>/dev/null)
   done
 
-  # Check .github for template symlinks
+  # Clean .github template symlinks
   if [ -d "$project_path/.github" ]; then
     while IFS= read -r -d '' link; do
-      local rel="${link#"$project_path/"}"
-      if ! grep -qx "$rel" "$gitignore" 2>/dev/null; then
-        echo "$rel" >> "$gitignore"
-      fi
+      rm "$link"
+      info "Removed: ${link#"$project_path/"}"
+      ((count++)) || true
     done < <(/usr/bin/find "$project_path/.github" -type l -print0 2>/dev/null)
   fi
+
+  # Remove settings.json if it exists
+  [ -f "$target/settings.json" ] && rm "$target/settings.json" && ((count++)) || true
+
+  echo ""
+  log "Removed $count file(s). Run setup.sh again to reinstall."
 }
 
 # ---------- Project install ----------
 install_project() {
   local project_path="$1"
   local profile_name="$2"
+  local force="${3:-false}"
 
   if [ ! -d "$project_path" ]; then
     error "Project path not found: $project_path"
@@ -199,19 +232,21 @@ install_project() {
 
   header "Installing to $target"
 
-  # --- settings.json (copied — may differ per project) ---
+  # --- settings.json (copied) ---
   local settings_dest="$target/settings.json"
   [ -e "$settings_dest" ] || [ -L "$settings_dest" ] && rm -f "$settings_dest"
   cp "$SCRIPT_DIR/config/settings.json" "$settings_dest"
+  ensure_gitignored "$project_path" "$settings_dest"
   log "Installed settings.json (copied)"
 
-  # --- Rules (top-level = shared, subdirs = profile-specific) ---
+  # --- Rules ---
   mkdir -p "$target/rules"
   for rule_file in "$SCRIPT_DIR/config/rules/"*.md; do
     [ -f "$rule_file" ] || continue
     local fname
     fname="$(basename "$rule_file")"
-    if symlink_file "$rule_file" "$target/rules/$fname"; then
+    if symlink_file "$rule_file" "$target/rules/$fname" "$force"; then
+      ensure_gitignored "$project_path" "$target/rules/$fname"
       log "Installed rule: $fname"
     fi
   done
@@ -225,7 +260,8 @@ install_project() {
           [ -f "$rule_file" ] || continue
           local fname
           fname="$(basename "$rule_file")"
-          if symlink_file "$rule_file" "$target/rules/$dir/$fname"; then
+          if symlink_file "$rule_file" "$target/rules/$dir/$fname" "$force"; then
+            ensure_gitignored "$project_path" "$target/rules/$dir/$fname"
             log "Installed rule: $dir/$fname"
           fi
         done
@@ -239,11 +275,10 @@ install_project() {
     for agent in "${AGENTS[@]}"; do
       local src="$SCRIPT_DIR/config/agents/$agent"
       if [ -f "$src" ]; then
-        if symlink_file "$src" "$target/agents/$agent"; then
+        if symlink_file "$src" "$target/agents/$agent" "$force"; then
+          ensure_gitignored "$project_path" "$target/agents/$agent"
           log "Installed agent: $agent"
         fi
-      else
-        warn "Agent not found: $agent (skipped)"
       fi
     done
   fi
@@ -254,11 +289,10 @@ install_project() {
     for cmd in "${COMMANDS[@]}"; do
       local src="$SCRIPT_DIR/config/commands/$cmd"
       if [ -f "$src" ]; then
-        if symlink_file "$src" "$target/commands/$cmd"; then
+        if symlink_file "$src" "$target/commands/$cmd" "$force"; then
+          ensure_gitignored "$project_path" "$target/commands/$cmd"
           log "Installed command: $cmd"
         fi
-      else
-        warn "Command not found: $cmd (skipped)"
       fi
     done
   fi
@@ -269,17 +303,14 @@ install_project() {
       local src_dir="$SCRIPT_DIR/config/skills/$skill"
       if [ -d "$src_dir" ]; then
         mkdir -p "$target/skills/$skill"
-        local skill_changed=false
         while IFS= read -r -d '' file; do
           local rel="${file#"$src_dir"/}"
           mkdir -p "$target/skills/$skill/$(dirname "$rel")"
-          if symlink_file "$file" "$target/skills/$skill/$rel"; then
-            skill_changed=true
+          if symlink_file "$file" "$target/skills/$skill/$rel" "$force"; then
+            ensure_gitignored "$project_path" "$target/skills/$skill/$rel"
           fi
         done < <(/usr/bin/find "$src_dir" -type f -print0)
-        if [ "$skill_changed" = true ]; then
-          log "Installed skill: $skill"
-        fi
+        log "Installed skill: $skill"
       fi
     done
   fi
@@ -290,15 +321,13 @@ install_project() {
     for tmpl in "${TEMPLATES[@]}"; do
       local src="$SCRIPT_DIR/config/templates/$tmpl"
       if [ -f "$src" ]; then
-        if symlink_file "$src" "$project_path/.github/$tmpl"; then
+        if symlink_file "$src" "$project_path/.github/$tmpl" "$force"; then
+          ensure_gitignored "$project_path" "$project_path/.github/$tmpl"
           log "Installed template: $tmpl"
         fi
       fi
     done
   fi
-
-  # --- Update .gitignore ---
-  ensure_gitignored "$project_path"
 
   echo ""
   log "Profile installed: $PROFILE_NAME"
@@ -333,6 +362,7 @@ add_item() {
         local rel="${file#"$src_dir"/}"
         mkdir -p "$target/skills/$item_name/$(dirname "$rel")"
         symlink_file "$file" "$target/skills/$item_name/$rel"
+        ensure_gitignored "$project_path" "$target/skills/$item_name/$rel"
       done < <(/usr/bin/find "$src_dir" -type f -print0)
       log "Added skill: $item_name"
       ;;
@@ -341,6 +371,7 @@ add_item() {
       [ -f "$src" ] || { error "Rule not found: $item_name"; exit 1; }
       mkdir -p "$target/rules"
       symlink_file "$src" "$target/rules/$item_name"
+      ensure_gitignored "$project_path" "$target/rules/$item_name"
       log "Added rule: $item_name"
       ;;
     command)
@@ -348,6 +379,7 @@ add_item() {
       [ -f "$src" ] || { error "Command not found: $item_name"; exit 1; }
       mkdir -p "$target/commands"
       symlink_file "$src" "$target/commands/$item_name"
+      ensure_gitignored "$project_path" "$target/commands/$item_name"
       log "Added command: $item_name"
       ;;
     agent)
@@ -355,6 +387,7 @@ add_item() {
       [ -f "$src" ] || { error "Agent not found: $item_name"; exit 1; }
       mkdir -p "$target/agents"
       symlink_file "$src" "$target/agents/$item_name"
+      ensure_gitignored "$project_path" "$target/agents/$item_name"
       log "Added agent: $item_name"
       ;;
     *)
@@ -362,14 +395,13 @@ add_item() {
       exit 1
       ;;
   esac
-
-  # Refresh .gitignore after adding
-  ensure_gitignored "$project_path"
 }
 
 # ---------- Parse args ----------
 PROJECT_PATH=""
 PROFILES=()
+FORCE=false
+CLEAN=false
 ADD_TYPE=""
 ADD_NAME=""
 
@@ -380,6 +412,8 @@ fi
 for arg in "$@"; do
   case "$arg" in
     --profile=*)        PROFILES+=("${arg#--profile=}") ;;
+    --force)            FORCE=true ;;
+    --clean)            CLEAN=true ;;
     --add)              ADD_TYPE="__pending__" ;;
     --list-profiles)    list_profiles; exit 0 ;;
     --help|-h)          usage ;;
@@ -400,15 +434,20 @@ done
 
 # ---------- Execute ----------
 
+[ -z "$PROJECT_PATH" ] && { error "Project path required"; usage; }
+
+# Handle --clean
+if [ "$CLEAN" = true ]; then
+  clean_symlinks "$PROJECT_PATH"
+  exit 0
+fi
+
 # Handle --add
 if [ -n "$ADD_TYPE" ] && [ "$ADD_TYPE" != "__pending__" ]; then
-  [ -z "$PROJECT_PATH" ] && { error "Project path required with --add"; usage; }
   [ -z "$ADD_NAME" ] && { error "Name required: --add <type> <name>"; usage; }
   add_item "$PROJECT_PATH" "$ADD_TYPE" "$ADD_NAME"
   exit 0
 fi
-
-[ -z "$PROJECT_PATH" ] && { error "Project path required"; usage; }
 
 # No --profile → install all
 if [ ${#PROFILES[@]} -eq 0 ]; then
@@ -419,5 +458,5 @@ if [ ${#PROFILES[@]} -eq 0 ]; then
 fi
 
 for profile in "${PROFILES[@]}"; do
-  install_project "$PROJECT_PATH" "$profile"
+  install_project "$PROJECT_PATH" "$profile" "$FORCE"
 done
