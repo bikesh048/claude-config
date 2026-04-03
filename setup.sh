@@ -115,41 +115,37 @@ symlink_file() {
   return 0
 }
 
-# ---------- Regenerate .gitignore managed block ----------
-update_gitignore() {
+# ---------- Ensure symlinks are in .gitignore ----------
+ensure_gitignored() {
   local project_path="$1"
   local target="$project_path/.claude"
   local gitignore="$project_path/.gitignore"
-  local marker_start="# claude-config:start"
-  local marker_end="# claude-config:end"
 
-  # Collect symlinks in managed dirs
-  local symlink_entries=".claude/settings.json"
+  # Always gitignore settings.json (copied but managed by setup)
+  if ! grep -qx '.claude/settings.json' "$gitignore" 2>/dev/null; then
+    echo ".claude/settings.json" >> "$gitignore"
+  fi
+
+  # Check each symlink in managed dirs
   for managed_dir in rules agents commands skills; do
     [ -d "$target/$managed_dir" ] || continue
     while IFS= read -r -d '' link; do
-      symlink_entries+=$'\n'"${link#"$project_path/"}"
+      local rel="${link#"$project_path/"}"
+      if ! grep -qx "$rel" "$gitignore" 2>/dev/null; then
+        echo "$rel" >> "$gitignore"
+      fi
     done < <(/usr/bin/find "$target/$managed_dir" -type l -print0 2>/dev/null)
   done
+
   # Check .github for template symlinks
   if [ -d "$project_path/.github" ]; then
     while IFS= read -r -d '' link; do
-      symlink_entries+=$'\n'"${link#"$project_path/"}"
+      local rel="${link#"$project_path/"}"
+      if ! grep -qx "$rel" "$gitignore" 2>/dev/null; then
+        echo "$rel" >> "$gitignore"
+      fi
     done < <(/usr/bin/find "$project_path/.github" -type l -print0 2>/dev/null)
   fi
-
-  # Remove old managed block
-  if grep -q "$marker_start" "$gitignore" 2>/dev/null; then
-    /usr/bin/sed -i '' "/$marker_start/,/$marker_end/d" "$gitignore"
-  fi
-
-  # Append fresh block
-  {
-    echo ""
-    echo "$marker_start"
-    echo "$symlink_entries" | sort
-    echo "$marker_end"
-  } >> "$gitignore"
 }
 
 # ---------- Project install ----------
@@ -302,7 +298,7 @@ install_project() {
   fi
 
   # --- Update .gitignore ---
-  update_gitignore "$project_path"
+  ensure_gitignored "$project_path"
 
   echo ""
   log "Profile installed: $PROFILE_NAME"
@@ -368,7 +364,7 @@ add_item() {
   esac
 
   # Refresh .gitignore after adding
-  update_gitignore "$project_path"
+  ensure_gitignored "$project_path"
 }
 
 # ---------- Parse args ----------
