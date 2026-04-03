@@ -213,7 +213,7 @@ install_project() {
   header "Installing to $target (mode: $mode_label)"
 
   # settings.json is always copied (project-specific permissions)
-  if install_file "$SCRIPT_DIR/project/settings.json" "$target/settings.json" "$update_mode" false; then
+  if install_file "$SCRIPT_DIR/config/settings.json" "$target/settings.json" "$update_mode" false; then
     log "Installed settings.json (copied)"
   fi
 
@@ -221,7 +221,7 @@ install_project() {
   mkdir -p "$target/rules"
 
   # Top-level rules (shared across all profiles)
-  for rule_file in "$SCRIPT_DIR/project/rules/"*.md; do
+  for rule_file in "$SCRIPT_DIR/config/rules/"*.md; do
     [ -f "$rule_file" ] || continue
     local fname
     fname="$(basename "$rule_file")"
@@ -233,7 +233,7 @@ install_project() {
   # Profile-specific rule subdirectories (e.g. typescript/)
   if [ ${#SHARED_RULES_DIRS[@]} -gt 0 ]; then
     for dir in "${SHARED_RULES_DIRS[@]}"; do
-      local src_dir="$SCRIPT_DIR/project/rules/$dir"
+      local src_dir="$SCRIPT_DIR/config/rules/$dir"
       if [ -d "$src_dir" ]; then
         mkdir -p "$target/rules/$dir"
         for rule_file in "$src_dir"/*.md; do
@@ -254,7 +254,7 @@ install_project() {
   if [ ${#AGENTS[@]} -gt 0 ]; then
     mkdir -p "$target/agents"
     for agent in "${AGENTS[@]}"; do
-      local src="$SCRIPT_DIR/project/agents/$agent"
+      local src="$SCRIPT_DIR/config/agents/$agent"
       if [ -f "$src" ]; then
         if install_file "$src" "$target/agents/$agent" "$update_mode" "$link_mode"; then
           log "Installed agent: $agent"
@@ -269,7 +269,7 @@ install_project() {
   if [ ${#COMMANDS[@]} -gt 0 ]; then
     mkdir -p "$target/commands"
     for cmd in "${COMMANDS[@]}"; do
-      local src="$SCRIPT_DIR/project/commands/$cmd"
+      local src="$SCRIPT_DIR/config/commands/$cmd"
       if [ -f "$src" ]; then
         if install_file "$src" "$target/commands/$cmd" "$update_mode" "$link_mode"; then
           log "Installed command: $cmd"
@@ -283,7 +283,7 @@ install_project() {
   # --- Install skills ---
   if [ ${#SKILLS[@]} -gt 0 ]; then
     for skill in "${SKILLS[@]}"; do
-      local src_dir="$SCRIPT_DIR/project/skills/$skill"
+      local src_dir="$SCRIPT_DIR/config/skills/$skill"
       if [ -d "$src_dir" ]; then
         mkdir -p "$target/skills/$skill"
         local skill_changed=false
@@ -308,7 +308,7 @@ install_project() {
   if [ ${#TEMPLATES[@]} -gt 0 ]; then
     mkdir -p "$project_path/.github"
     for tmpl in "${TEMPLATES[@]}"; do
-      local src="$SCRIPT_DIR/project/templates/$tmpl"
+      local src="$SCRIPT_DIR/config/templates/$tmpl"
       if [ -f "$src" ]; then
         local dest="$project_path/.github/$tmpl"
         if [ "$update_mode" = true ]; then
@@ -351,11 +351,11 @@ add_item() {
 
   case "$item_type" in
     skill)
-      local src_dir="$SCRIPT_DIR/project/skills/$item_name"
+      local src_dir="$SCRIPT_DIR/config/skills/$item_name"
       if [ ! -d "$src_dir" ]; then
         error "Skill not found: $item_name"
         echo "  Available:"
-        for d in "$SCRIPT_DIR/project/skills/"*/; do
+        for d in "$SCRIPT_DIR/config/skills/"*/; do
           echo "    - $(basename "$d")"
         done
         exit 1
@@ -369,11 +369,11 @@ add_item() {
       log "Added skill: $item_name"
       ;;
     rule)
-      local src="$SCRIPT_DIR/project/rules/$item_name"
+      local src="$SCRIPT_DIR/config/rules/$item_name"
       if [ ! -f "$src" ]; then
         error "Rule not found: $item_name"
         echo "  Available:"
-        ls "$SCRIPT_DIR/project/rules/"
+        ls "$SCRIPT_DIR/config/rules/"
         exit 1
       fi
       mkdir -p "$target/rules"
@@ -381,11 +381,11 @@ add_item() {
       log "Added rule: $item_name"
       ;;
     command)
-      local src="$SCRIPT_DIR/project/commands/$item_name"
+      local src="$SCRIPT_DIR/config/commands/$item_name"
       if [ ! -f "$src" ]; then
         error "Command not found: $item_name"
         echo "  Available:"
-        ls "$SCRIPT_DIR/project/commands/"
+        ls "$SCRIPT_DIR/config/commands/"
         exit 1
       fi
       mkdir -p "$target/commands"
@@ -393,11 +393,11 @@ add_item() {
       log "Added command: $item_name"
       ;;
     agent)
-      local src="$SCRIPT_DIR/project/agents/$item_name"
+      local src="$SCRIPT_DIR/config/agents/$item_name"
       if [ ! -f "$src" ]; then
         error "Agent not found: $item_name"
         echo "  Available:"
-        ls "$SCRIPT_DIR/project/agents/"
+        ls "$SCRIPT_DIR/config/agents/"
         exit 1
       fi
       mkdir -p "$target/agents"
