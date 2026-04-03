@@ -237,6 +237,21 @@ install_project() {
     mode_label="link"
   fi
 
+  # --- Clean stale symlinks ---
+  if [ "$link_mode" = true ]; then
+    local stale_count=0
+    while IFS= read -r -d '' link; do
+      if [ ! -e "$link" ]; then
+        rm "$link"
+        warn "Removed stale symlink: ${link#"$target/"}"
+        ((stale_count++)) || true
+      fi
+    done < <(/usr/bin/find "$target" -type l -print0 2>/dev/null)
+    if [ "$stale_count" -gt 0 ]; then
+      log "Cleaned $stale_count stale symlink(s)"
+    fi
+  fi
+
   # --- Install settings ---
   header "Installing to $target (mode: $mode_label)"
 
