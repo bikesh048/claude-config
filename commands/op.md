@@ -29,6 +29,42 @@ Parse arguments to determine action:
 
 ---
 
+## Custom Fields Reference (Single Source of Truth)
+
+All ticket types share these **common fields**:
+
+| API Field | Display Name | Notes |
+|-----------|-------------|-------|
+| `id` | ID | |
+| `subject` | Subject | |
+| `._embedded.type.name` | Type | |
+| `._embedded.status.name` | Status | |
+| `._embedded.priority.name` | Priority | |
+| `._embedded.assignee.name` | Assignee | May be null |
+| `._embedded.parent` | Parent | Use `._links.parent.title` for name |
+| `.description.raw` | Description | Markdown format |
+| `.customField31` | Branch | Quick Snippets field |
+| `.startDate` | Start Date | |
+| `.dueDate` | Due Date | May be null |
+| `.estimatedTime` | Estimated Time | ISO 8601 duration |
+| `.spentTime` | Spent Time | ISO 8601 duration |
+| `.createdAt` | Created | |
+| `.updatedAt` | Updated | |
+
+**Tech Debt** type has additional fields:
+
+| API Field | Display Name | Notes |
+|-----------|-------------|-------|
+| `.customField33.raw` | Pain Points | Why this matters — markdown |
+| `.customField34.raw` | Current State | How things work now — markdown |
+| `.customField35.raw` | Proposed Solution | Target architecture — markdown |
+| `.customField37.raw` | Risks & Mitigations | Risk table — markdown |
+| `.customField38.raw` | Implementation Plan | Phased steps — markdown |
+
+Use these field mappings in **both Read and Create** actions.
+
+---
+
 ## Action: Read
 
 Read a ticket and output a planning summary.
@@ -43,42 +79,63 @@ If no ticket ID can be resolved, ask the user.
 
 ### 2. Fetch ticket via API
 
+Fetch the **full response** (do not filter with jq). Extract common fields for all types, plus type-specific fields based on the ticket type.
+
 ```bash
 curl -s \
   "${OP_BASE_URL}/api/v3/work_packages/${TICKET_ID}" \
   -H "Content-Type: application/json" \
-  -u "apikey:${OPENPROJECT_API_KEY}" \
-  | jq '{
-    id: .id,
-    subject: .subject,
-    type: ._embedded.type.name,
-    status: ._embedded.status.name,
-    priority: ._embedded.priority.name,
-    assignee: ._embedded.assignee.name,
-    description: .description.raw,
-    createdAt: .createdAt,
-    updatedAt: .updatedAt
-  }'
+  -u "apikey:${OPENPROJECT_API_KEY}"
 ```
 
+Extract fields per the **Custom Fields Reference** above.
+
 ### 3. Output format
+
+**Common header (all types):**
 
 ```
 ## OP#<id>: <subject>
 
 **Type:** <type> | **Status:** <status> | **Priority:** <priority> | **Assignee:** <assignee>
+**Parent:** <parent or "none"> | **Branch:** `<branch or "not set">`
+**Start:** <startDate> | **Due:** <dueDate or "not set"> | **Estimate:** <estimatedTime or "not set">
 
 ### Description
 <description — truncate to key points if very long, preserve acceptance criteria>
+```
 
+**Additional sections for Tech Debt:**
+
+```
+### Pain Points
+<customField33 content>
+
+### Current State
+<customField34 content>
+
+### Proposed Solution
+<customField35 content>
+
+### Risks & Mitigations
+<customField37 content>
+
+### Implementation Plan
+<customField38 content>
+```
+
+**Footer (all types):**
+
+```
 ### Acceptance Criteria
 <extract from description if present, otherwise note "not specified">
 ```
 
 Rules:
 - Strip HTML tags, output as plain markdown
-- If description > 500 words, summarize to key requirements and acceptance criteria
+- If any section > 500 words, summarize to key points
 - Highlight URLs prominently
+- Only show Tech Debt sections that have content (skip empty/null)
 - Do NOT fetch child tickets or relations
 - After output, ask: **"Create branch and start working, or need more context?"**
 
@@ -158,6 +215,29 @@ curl -s -X POST \
 ```
 
 Always set `startDate` to today. If description provided, add `"description": {"raw": "..."}`.
+
+**For Tech Debt type**, also ask for and include these fields (per **Custom Fields Reference**):
+
+| Field | Prompt | Required |
+|-------|--------|----------|
+| `customField33` | Pain Points — why does this matter? | Yes |
+| `customField34` | Current State — how does it work now? | Yes |
+| `customField35` | Proposed Solution — what's the target? | Yes |
+| `customField37` | Risks & Mitigations | Optional |
+| `customField38` | Implementation Plan | Optional |
+
+Add as markdown custom fields in the create payload:
+```json
+{
+  "customField33": {"raw": "..."},
+  "customField34": {"raw": "..."},
+  "customField35": {"raw": "..."},
+  "customField37": {"raw": "..."},
+  "customField38": {"raw": "..."}
+}
+```
+
+Skip optional fields if user doesn't provide them.
 
 ### 4. Generate branch name and update ticket
 
@@ -254,14 +334,37 @@ curl -s -X POST \
 
 ## Error Handling
 
-- **Missing API key**: Prompt user to set `OPENPROJECT_API_KEY`
+- **Missing API key**: Prompt user to set `OPENPROJECT_API_KEY` in `.claude/settings.local.json`
 - **404 Not Found**: Invalid ticket ID
 - **401 Unauthorized**: API key invalid or expired
 - **403 Forbidden**: Insufficient permissions
 - **422 Validation**: Show error details
 
+## Credentials
+
+Read credentials from `.claude/settings.local.json` in the project root:
+
+```json
+{
+  "env": {
+    "OP_BASE_URL": "https://...",
+    "OP_PROJECT_SLUG": "...",
+    "OPENPROJECT_API_KEY": "...",
+    "GITHUB_ORG_REPO": "...",
+    "BASE_BRANCH": "..."
+  }
+}
+```
+
+**Before any API call**, read `.claude/settings.local.json` and extract:
+- `OP_BASE_URL` — strip trailing slash
+- `OP_PROJECT_SLUG`
+- `OPENPROJECT_API_KEY`
+- `BASE_BRANCH` (for git operations)
+- `GITHUB_ORG_REPO` (for PR links)
+
+Do NOT rely on shell environment variables — always read from this file.
+
 ## Constants
 
-- **Base URL**: `${OP_BASE_URL}`
-- **Project**: `${OP_PROJECT_SLUG}`
 - **Ticket URL**: `${OP_BASE_URL}/projects/${OP_PROJECT_SLUG}/work_packages/${ID}`
