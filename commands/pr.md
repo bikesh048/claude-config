@@ -56,11 +56,20 @@ Check whether changes affect documented architecture:
 
 Only update what's essential — module structure, new files, changed capabilities. Don't over-document.
 
-### 5. Get OP ticket number
+### 5. Rebase on latest base branch
+
+```bash
+git fetch origin ${BASE_BRANCH}
+git rebase origin/${BASE_BRANCH}
+```
+
+Resolve any conflicts during the rebase. If conflicts are found, fix them, run `git rebase --continue`, and re-run pre-flight checks (step 3) to ensure nothing broke.
+
+### 6. Get OP ticket number
 
 Extract from branch name (e.g., `bug/1727-fix-for-...` → `#1727`) or ask the user.
 
-### 6. Push and create PR
+### 7. Push and create PR
 
 ```bash
 git push -u origin <branch-name>
@@ -90,7 +99,7 @@ PREOF
 
 If a PR already exists for the branch, use `gh pr edit <number>` instead.
 
-### 7. Return PR URL
+### 8. Return PR URL
 
 Always show the PR URL to the user when done.
 
