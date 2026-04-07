@@ -43,7 +43,10 @@ All ticket types share these **common fields**:
 | `._embedded.assignee.name` | Assignee | May be null |
 | `._embedded.parent` | Parent | Use `._links.parent.title` for name |
 | `.description.raw` | Description | Markdown format |
-| `.customField30.raw` | Acceptance Criteria | Markdown checklist — `- [ ]` items |
+| `.customField24.raw` | Steps to Reproduce | Numbered list — Bug type only |
+| `.customField25.raw` | Expected Behavior | Bullet points — Bug type only |
+| `.customField26.raw` | Actual Behavior | Bullet points — Bug type only |
+| `.customField30.raw` | Acceptance Criteria | Markdown checklist — `- [ ]` items (non-Bug types) |
 | `.customField31` | Branch | Quick Snippets field |
 | `.startDate` | Start Date | |
 | `.dueDate` | Due Date | May be null |
@@ -104,6 +107,19 @@ Extract fields per the **Custom Fields Reference** above.
 
 ### Description
 <description — truncate to key points if very long, preserve acceptance criteria>
+```
+
+**Additional sections for Bug type:**
+
+```
+### Steps to Reproduce
+<customField24 content>
+
+### Actual Behavior
+<customField26 content>
+
+### Expected Behavior
+<customField25 content>
 ```
 
 **Additional sections for Tech Debt:**
@@ -222,6 +238,36 @@ Always set `startDate` to today.
 - Generate the **description** from conversation context — summarize what the work involves
 - Generate **acceptance criteria** (`customField30`) as a markdown checklist (`- [ ]` items) covering all verifiable outcomes
 - Do NOT leave these empty or ask the user to provide them — you have the context, use it
+
+**For Bug type**, use dedicated custom fields — do NOT embed these sections in the description:
+
+```json
+{
+  "description": {
+    "raw": "## Description\n\n<concise summary of what the bug is>"
+  },
+  "customField24": {
+    "raw": "1. <step 1>\n2. <step 2>\n3. <step 3>"
+  },
+  "customField26": {
+    "raw": "- <what currently happens>"
+  },
+  "customField25": {
+    "raw": "- <expected outcome, point 1>\n- <expected outcome, point 2>"
+  }
+}
+```
+
+Field mapping for Bug type:
+| Field | Custom Field | Format |
+|-------|-------------|--------|
+| Steps to Reproduce | `customField24` | Numbered list |
+| Actual Behavior | `customField26` | Bullet points |
+| Expected Behavior | `customField25` | Bullet points |
+
+Do NOT include `customField30` (Acceptance Criteria) for Bug tickets — leave it empty.
+
+**For all other types:**
 
 ```json
 {
