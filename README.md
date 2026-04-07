@@ -4,6 +4,7 @@ Shared Claude Code configuration for the organization. Symlinks commands, rules,
 
 ## Quick Start
 
+**macOS / Linux / Git Bash:**
 ```bash
 git clone git@github.com:TripcartHQ/claude-config.git
 cd claude-config
@@ -17,16 +18,41 @@ cd claude-config
 # First run prompts for settings.local.json (API keys, project config)
 ```
 
+**Windows (PowerShell):**
+```powershell
+git clone git@github.com:TripcartHQ/claude-config.git
+cd claude-config
+
+# Requires Developer Mode or run PowerShell as Administrator
+# Settings > System > For developers > Developer Mode
+
+# 1. Choose what to install by default
+.\setup.ps1 -Config
+
+# 2. Install into a project
+.\setup.ps1 C:\projects\tripcart-builder
+```
+
 ## For New Team Members
 
+**macOS / Linux:**
 1. Clone this repo
 2. Run `./setup.sh --config` to pick your defaults
 3. Run `./setup.sh ~/projects/your-project` (or just `./setup.sh` and type the path)
 4. Fill in `settings.local.json` when prompted
 5. Done
 
+**Windows:**
+1. Clone this repo
+2. Enable Developer Mode (Settings > System > For developers) **or** run PowerShell as Administrator
+3. Run `.\setup.ps1 -Config` to pick your defaults
+4. Run `.\setup.ps1 C:\projects\your-project`
+5. Fill in `settings.local.json` when prompted
+6. Done
+
 ## Usage
 
+**macOS / Linux / Git Bash:**
 ```bash
 # Configure what gets installed by default (interactive wizard)
 ./setup.sh --config
@@ -52,6 +78,34 @@ cd claude-config
 # List available items
 ./setup.sh --list                                                  # everything
 ./setup.sh --list rule                                             # just rules
+```
+
+**Windows (PowerShell):**
+```powershell
+# Configure what gets installed by default (interactive wizard)
+.\setup.ps1 -Config
+
+# Install into a project (uses defaults.conf)
+.\setup.ps1                                                       # prompts for path
+.\setup.ps1 C:\projects\your-project
+
+# Replace existing files with symlinks
+.\setup.ps1 C:\projects\your-project -Force
+
+# Add extras beyond defaults
+.\setup.ps1 C:\projects\your-project -Add rule                    # all rules
+.\setup.ps1 C:\projects\your-project -Add rule security.md        # specific rule
+.\setup.ps1 C:\projects\your-project -Add agent code-reviewer.md
+.\setup.ps1 C:\projects\your-project -Add skill playwright-cli
+
+# Remove
+.\setup.ps1 C:\projects\your-project -Remove                      # remove everything
+.\setup.ps1 C:\projects\your-project -Remove command op.md        # specific file
+.\setup.ps1 C:\projects\your-project -Remove rule                 # all rules
+
+# List available items
+.\setup.ps1 -List                                                  # everything
+.\setup.ps1 -List rule                                             # just rules
 ```
 
 ## defaults.conf
@@ -117,7 +171,8 @@ My Account -> Access Tokens -> API -> Generate
 
 ```
 claude-config/
-├── setup.sh                      # Setup script
+├── setup.sh                      # Setup script (macOS/Linux/Git Bash)
+├── setup.ps1                     # Setup script (Windows PowerShell)
 ├── defaults.conf.example         # Default config template
 ├── settings.json                 # Shared permissions template
 ├── settings.local.json.example   # Project env template
