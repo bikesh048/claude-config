@@ -43,6 +43,7 @@ All ticket types share these **common fields**:
 | `._embedded.assignee.name` | Assignee | May be null |
 | `._embedded.parent` | Parent | Use `._links.parent.title` for name |
 | `.description.raw` | Description | Markdown format |
+| `.customField30.raw` | Acceptance Criteria | Markdown checklist — `- [ ]` items |
 | `.customField31` | Branch | Quick Snippets field |
 | `.startDate` | Start Date | |
 | `.dueDate` | Due Date | May be null |
@@ -128,7 +129,7 @@ Extract fields per the **Custom Fields Reference** above.
 
 ```
 ### Acceptance Criteria
-<extract from description if present, otherwise note "not specified">
+<read from customField30 if present, otherwise note "not specified">
 ```
 
 Rules:
@@ -183,6 +184,7 @@ Create a new ticket under a parent.
 - Fetch parent ticket to confirm it exists, print subject for confirmation
 - If type not provided, ask (default: `task`)
 - Ask for title
+- **Always generate description and acceptance criteria from conversation context** — do NOT create bare tickets with just a title
 
 ### 2. Type mapping
 
@@ -214,7 +216,19 @@ curl -s -X POST \
   }'
 ```
 
-Always set `startDate` to today. If description provided, add `"description": {"raw": "..."}`.
+Always set `startDate` to today.
+
+**Always include `description` and `customField30` (Acceptance Criteria):**
+- Generate the **description** from conversation context — summarize what the work involves
+- Generate **acceptance criteria** (`customField30`) as a markdown checklist (`- [ ]` items) covering all verifiable outcomes
+- Do NOT leave these empty or ask the user to provide them — you have the context, use it
+
+```json
+{
+  "description": {"raw": "## Summary\n\n..."},
+  "customField30": {"raw": "- [ ] ...\n- [ ] ..."}
+}
+```
 
 **For Tech Debt type**, also ask for and include these fields (per **Custom Fields Reference**):
 
